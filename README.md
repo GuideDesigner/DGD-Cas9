@@ -9,7 +9,7 @@ DGD (Deep Guide Designer) is python based on-target scoring method for Cas9 sequ
 - Github directory contains main files and subsidary python files for the ease of users.
 - Name of main file is ```DGD.py``` which when run will execute all the necessary files and give score as output.
 - The input file should be fasta sequence (```.fa```), DGD pipeline can take multiple fasta sequence files.
-- Accessory files (python) will be provided for users baed on request who would like to study and integrate the features and outputs in their pipelines.
+- Accessory files (python) are provided for users in **Accessory** folder, who would like to study and integrate the features and outputs in their pipelines.
 - Prior to use of any files both main and accessory, please install the packages as mentioned in ```Requirement``` section.
 
 #### Requirements
@@ -115,8 +115,3 @@ If you have any issues, please contact us
 A. Vipin Menon (a.vipin.menon@gmail.com)
 
 Jin-Wu Nam (jwnam@hanyang.ac.kr)
-
-
-
-
-
