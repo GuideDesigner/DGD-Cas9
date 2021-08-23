@@ -21,7 +21,12 @@ DGD (Deep Guide Designer) is python based on-target scoring method for Cas9 sequ
 - Tensorflow(version == 2.2.0)
 - R (version >= 3.6)
 - gcc (version >= 4.7.0)
+
 #### Package Installation
+You should compile two c++ files:
+```
+make
+```
 For Vienna RNA package see the instruction in their official site https://www.tbi.univie.ac.at/RNA/ for python installation
 The rest packages could be installed by using ```pip``` or ```conda```
 
