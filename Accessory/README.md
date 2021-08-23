@@ -260,10 +260,10 @@ Connection_Pos20_Pos102	7	34	20	20	1_40_20	TL
 ``` python3 FeatureMaker.py spacer_scaffold_basepairs.csv Target_sequence_feature.csv Serial_connection_spacer_scaffold.csv ```
 - Note: All the files should be in provided in the same order as stated above
 ### Biofeatures for spacer-scaffold  sequences
-WE calculated biofeatures for spacer-scaffold interaction and sequences
+We calculated biofeatures for spacer-scaffold interaction and sequences
 - There are three input files taken into account
 - The first file is **Structure_Connection.csv** from fasta (python) code.
-- -The second file is Consecutive  Connection annotated file generated from Rscript ** Serial_connection_spacer_scaffold.csv**. 
+- The second file is Consecutive  Connection annotated file generated from Rscript ** Serial_connection_spacer_scaffold.csv**. 
 - The final file is the file generated from FeatureMaker python code.** Serial_connection_spacer_scaffold.csv**. 
  ``` python3 EnergyMaker.py Structure_Connection.csv Serial_connection_spacer_scaffold.csv Feature_Data_Spacer_Scaffold.csv ```
 - The output file is **Deep_learning_feature_with_spacer_scaffold.csv**
