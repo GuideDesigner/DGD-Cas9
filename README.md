@@ -107,6 +107,7 @@ JQ277699.1:86:116	86	116	+	TGTGTCAAACCAGCAGTTCGCAGGTGGCTG	55.41802216
 MIT
 ## Contributors
 A. Vipin Menon, Jang-il Sohn, Seokju Park and Jin-Wu Nam
+
 Bioinformatic and Genomics Lab., Hanyang University, Seoul 04763, Korea
 
 ## Contact
