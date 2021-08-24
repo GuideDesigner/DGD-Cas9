@@ -27,6 +27,8 @@ You should compile two c++ files:
 ```
 make
 ```
+Precompiled files(```connection_to_matrix``` and ```CC_csv```) are provided for ```DGD.py```
+
 For Vienna RNA package see the instruction in their official site https://www.tbi.univie.ac.at/RNA/ for python installation
 The rest packages could be installed by using ```pip``` or ```conda```
 
