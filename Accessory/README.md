@@ -125,10 +125,13 @@ JQ277699.1:1062:1092    96      95      94      93      92      0       91      
       38      37      0       0       0       0       32      31      30      29      72      71      70      69      68      0       0       0       66      65      64      63      0       61      0       0       0       0       0       0       54      0       52      51      50      49      0       45      44      43      42      41      0       0       25      24      23      22      0       20      19      17      16      15      13      0       0       10      0       8       7       5       4       3       2       1       0       0       0       0       0       0
 ```
 ### Connection to Matrix
+- ```connection_to_matrix.cpp``` file parse the conntion table to matrix 
+- You can convert the cpp file to binary executable file using ``` g++ -Wall -g -std=c++11 connection_to_matrix.cpp -o connection_to_matrix ``` 
+-  ``` ./connection_to_matrix Structure_out.txt 102 > Structure_basepairs.csv ```
 - Binary executable file which converts the parsed connection table to matrix
 - The matrix file contains spacer-spacer,spacer-scaffold and scaffold-scaffold interaction in binary format (0 and 1)
 - Output in ```.csv``` format
-``` ./connection_to_matrix Structure_out.txt 102 > Structure_basepairs.csv ```
+
 ### Segmenting Spacer and scaffold interaction
 - Code selects only spacer-scaffold interaction 
 - The input for the code is **Structure_basepairs.csv** file from previous code execution
@@ -227,11 +230,12 @@ Connection_Pos1_Pos21	Connection_Pos1_Pos22	Connection_Pos1_Pos23	Connection_Pos
 - Ouput (**spacer_scaffold_feature.csv**)
 - 
 ### Consecutive Connection
-- A binary executible file to generate consecutive connection
+- consecutive Connection for spacer-scaffold interaction are developed usign C++ code  ``` g++ -Wall -g -std=c++11 CC_csv.cpp -o CC_csv ``` 
+- A binary executible file made from previous code is used to generate consecutive connection
 ``` ./CC_csv spacer_scaffold_feature.csv > CC_feature.csv ```
 
 ### Annotating the Consecutive Connection
-- A Rscript is made to annotate TL (tetra loop), SL1 (Stem Loop 1), SL2 (Stem Loop 2) and Stem Loop 3 (SL3), Repeat ( R ), Anti-Repeat (AR), Linker Region (LR)
+- A Rscript is made to annotate TL (tetra loop), SL1 (Stem Loop 1), SL2 (Stem Loop 2) and Stem Loop 3 (SL3), Repeat ( R ), Anti-Repeat (AR), Linker Region (LR) based on Nishimasu paper 
 - The input is output file from CC_csv
 ``` Rscript CC_Annotation_connection.R```
 - Output ```.csv ``` format. They consist of ID, Spacer_position,Scaffold_position,Consecutive Connection ID, Consecutive_Connection_number,Unique ID, Structure Annotation
