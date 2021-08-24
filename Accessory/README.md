@@ -125,7 +125,7 @@ JQ277699.1:1062:1092    96      95      94      93      92      0       91      
       38      37      0       0       0       0       32      31      30      29      72      71      70      69      68      0       0       0       66      65      64      63      0       61      0       0       0       0       0       0       54      0       52      51      50      49      0       45      44      43      42      41      0       0       25      24      23      22      0       20      19      17      16      15      13      0       0       10      0       8       7       5       4       3       2       1       0       0       0       0       0       0
 ```
 ### Connection to Matrix
-- ```connection_to_matrix.cpp``` file parse the conntion table to matrix 
+- ```connection_to_matrix.cpp``` file parse the connection table to matrix 
 - You can convert the cpp file to binary executable file using ``` g++ -Wall -g -std=c++11 connection_to_matrix.cpp -o connection_to_matrix ``` 
 -  ``` ./connection_to_matrix Structure_out.txt 102 > Structure_basepairs.csv ```
 - Binary executable file which converts the parsed connection table to matrix
