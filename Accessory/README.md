@@ -240,14 +240,18 @@ Connection_Pos1_Pos21	Connection_Pos1_Pos22	Connection_Pos1_Pos23	Connection_Pos
 ``` Rscript CC_Annotation_connection.R```
 - Output ```.csv ``` format. They consist of ID, Spacer_position,Scaffold_position,Consecutive Connection ID, Consecutive_Connection_number,Unique ID, Structure Annotation
 ```
-connectioposition	Pos_A	Pos_B	CC_id	CC_num	Unique_ID	Structure
-Connection_Pos20_Pos102	1	40	20	20	1_40_20	AR
-Connection_Pos20_Pos102	2	39	20	20	1_40_20	AR
-Connection_Pos20_Pos102	3	38	20	20	1_40_20	AR
-Connection_Pos20_Pos102	4	37	20	20	1_40_20	TL
-Connection_Pos20_Pos102	5	36	20	20	1_40_20	TL
-Connection_Pos20_Pos102	6	35	20	20	1_40_20	TL
-Connection_Pos20_Pos102	7	34	20	20	1_40_20	TL
+nucleotide	Pos_A	Pos_B	CC_id	CC_num	Unique_ID	Structure
+Connection_Pos1_Pos40	1	40	20	20	1_40_20	TL
+Connection_Pos2_Pos39	2	39	20	20	1_40_20	TL
+Connection_Pos3_Pos38	3	38	20	20	1_40_20	TL
+Connection_Pos4_Pos37	4	37	20	20	1_40_20	TL
+Connection_Pos5_Pos36	5	36	20	20	1_40_20	R
+Connection_Pos6_Pos35	6	35	20	20	1_40_20	R
+Connection_Pos7_Pos34	7	34	20	20	1_40_20	R
+Connection_Pos8_Pos33	8	33	20	20	1_40_20	R
+Connection_Pos9_Pos32	9	32	20	20	1_40_20	R
+Connection_Pos10_Pos31	10	31	20	20	1_40_20	R
+Connection_Pos11_Pos30	11	30	20	20	1_40_20	R
 ```
 ### One hot encoding and biofeatures for target sequence
 - We calucated the respective one hot encoding features and biofeatures for each nucleotide (A/T/G/C).
