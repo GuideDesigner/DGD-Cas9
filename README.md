@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # DGD
 =======
 # DGD (Deep Guide Designer)
@@ -126,4 +126,4 @@ If you have any issues, please contact us
 A. Vipin Menon (a.vipin.menon@gmail.com)
 
 Jin-Wu Nam (jwnam@hanyang.ac.kr)
->>>>>>> 9f724f21e04c781da091c6c50276290ff64e40b9
+
