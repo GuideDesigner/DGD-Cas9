@@ -4,7 +4,7 @@
 # DGD (Deep Guide Designer)
 [![Build Status](https://travis-ci.org/joemccann/dillinger.svg?branch=master)](https://travis-ci.org/joemccann/dillinger)
 
-DGD (Deep Guide Designer) is python based on-target scoring method for Cas9 sequences, which is developed by integrating information from target sequence, biofeatures and spacer-scaffold interaction of sgRNA into CNN based deep learning model.
+DGD (Deep Guide Designer) is python based on-target scoring method for Cas9 sequences, which is developed by integrating information from target sequence, biofeatures and spacer-scaffold base-pairing of sgRNA into CNN based deep learning model.
 
 ## Source Code
 
@@ -26,11 +26,11 @@ DGD (Deep Guide Designer) is python based on-target scoring method for Cas9 sequ
 - gcc (version >= 4.7.0)
 
 #### Package Installation
-You should compile two c++ files:
+You compile c++ file:
 ```
 make
 ```
-Pre-compiled files(```connection_to_matrix``` and ```CC_csv```) are provided for ```DGD.py```
+Pre-compiled files(```connection_to_matrix``` ) are provided for ```DGD.py```
 
 For Vienna RNA package see the instruction in their official site https://www.tbi.univie.ac.at/RNA/ for python installation
 The rest packages could be installed by using ```pip``` or ```conda```
