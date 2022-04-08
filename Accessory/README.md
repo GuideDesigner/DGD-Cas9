@@ -3,7 +3,7 @@
 ## targetsequence
 - Take input as fasta file 
 ```python
-    python3 targetsequencemaker input.fa
+    ```python3 targetsequencemaker input.fa```
 ```
 ```input.fa```
 ```
