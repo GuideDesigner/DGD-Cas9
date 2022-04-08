@@ -1,4 +1,5 @@
 # Accessory files of DGD
+This segment explains the different code used for developing 
 
 ## targetsequence
 - Take input as fasta file 
