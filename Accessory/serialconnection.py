@@ -1,3 +1,20 @@
+import RNA
+import sys
+import os
+import numpy as np
+import pandas as pd
+from collections import defaultdict, OrderedDict
+from Bio.SeqUtils import MeltingTemp as mt
+import itertools
+from itertools import chain
+import make_arrays
+import stacking_model
+import string
+import tensorflow as tf
+from tensorflow.python.client import device_lib
+import tensorflow.keras.backend as kb
+from tensorflow.keras import models, layers, optimizers, losses
+
 def serialconnection():
     spacer_scaffold = pd.read_csv('spacer_scaffold_feature.csv')
     spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 33) & (
