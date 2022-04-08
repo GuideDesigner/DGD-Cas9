@@ -61,7 +61,7 @@ Q278699.2:636:666,636,666,-,TTCTTCCTCCTCCCGAAAGTAGGCTGGCTT
 ## fasta (python file)
 The algorithnm concatenates the spacer part of sgRNA sequence (20nt) to scaffold (already given)
 Takes Cas9Sequencemaker output as the input to generate two files (**Structure_Connection.fa and Structure_Connection.csv**)
-``` python3 fastamaker.py Structure_file.csv```
+``` python3 fastamaker.py ```
 The first file is in  fasta ```.fa ``` format, which is used in subsequent steps.
 ```
 >JQ277699.1:608:638
