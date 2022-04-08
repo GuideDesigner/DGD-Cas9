@@ -1,3 +1,20 @@
+import RNA
+import sys
+import os
+import numpy as np
+import pandas as pd
+from collections import defaultdict, OrderedDict
+from Bio.SeqUtils import MeltingTemp as mt
+import itertools
+from itertools import chain
+import make_arrays
+import stacking_model
+import string
+import tensorflow as tf
+from tensorflow.python.client import device_lib
+import tensorflow.keras.backend as kb
+from tensorflow.keras import models, layers, optimizers, losses
+
 def fastamaker():
     file1 = open("Structure_file.csv", 'r')
     out = open('Structure_Connection.fa', 'w')
