@@ -931,7 +931,7 @@ def score_deep():
     in_, add_, pop_id = get_Input(
         "Deep_learning_file.csv")
 
-    SpCas9 = test_model('./SpCas9/', in_, add_)
+    SpCas9 = test_model('./models/', in_, add_)
     SpCas9_score = pd.DataFrame(SpCas9.reshape(len(SpCas9), 1))
     SpCas9_score.columns = ['DGDSpCas9']
     ID = pd.DataFrame(pop_id, columns=['ID'])
