@@ -1,5 +1,5 @@
 # Accessory files of DGD
-This segment explains the different code used for developing 
+This segment explains the different code used for developing. Tha accessory files of DGD conist of different codes, used for developing features relevant for both target sequence and spacer-scaffold information. This section is useful for developers who would like to use the programm for their research and interest
 
 ## targetsequence
 - Take input as fasta file 
