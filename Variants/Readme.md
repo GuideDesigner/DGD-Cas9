@@ -78,7 +78,7 @@ DGD python files is executed on fasta file
     AGAATTGAAGCCACAGTGGGTGGGAGCTATCCTTTTGTGATCAGAAAGCTTTGAGGAGCAGCATCAATCG
     CCTTTGCCTTCGGACTTCTCCGGGGCCAGCAGCCGCCCGACCAGGGGCCCGGGGCCACGGGCTCAGCCGA
 ```
-- Output (DGD.csv)
+- Output (DGDVar.csv)
 ```
 ID	Start	End	Strand	Sequence	DGDSpCas9	DGDeSpCas9	DGDHypaCas9	DGDSpCas9Hf1	DGDSniperCas9	DGDevoCas9	DGDxCas9	DGDSpCas9VRQR	DGDSpCas9NG
 JQ277699.1:732:762:+	732	762	+	TTTTGTGATCAGAAAGCTTTGAGGAGCAGC	2.0164063	1.78425	1.78425	1.0501053	1.78425	1.78425	1.78425	16.726068	32.538662
@@ -92,3 +92,19 @@ Q278699.2:1189:1219:-	1189	1219	-	TTTGGCCGCCTCTCACTCCCAATACAGAAT	29.682705	26.49
 JQ277699.1:772:802:+	772	802	+	TTTGCCTTCGGACTTCTCCGGGGCCAGCAG	19.421137	14.117567	14.117567	0.37289906	14.117567	14.117567	14.117567	no_activity	4.8990602
 Q278699.2:772:802:+	772	802	+	TTTGCCTTCGGACTTCTCCGGGGCCAGCAG	19.421137	14.117567	14.117567	0.37289906	14.117567	14.117567	14.117567	no_activity	4.8990602
 ```
+### Description of output file
+The output file has score for SpCas9 and its associated variants. The models are based on ```NNN``` PAM for all the variants. The score below than zero, has been desiginated as "no-activity".
+
+## License
+MIT
+## Contributors
+A. Vipin Menon, Jang-il Sohn, Seokju Park and Jin-Wu Nam
+
+Bioinformatic and Genomics Lab., Hanyang University, Seoul 04763, Korea
+
+## Contact
+If you have any issues, please contact us
+
+A. Vipin Menon (a.vipin.menon@gmail.com)
+
+Jin-Wu Nam (jwnam@hanyang.ac.kr)
