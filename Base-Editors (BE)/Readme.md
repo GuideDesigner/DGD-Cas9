@@ -28,7 +28,7 @@ You compile c++ file:
 ```
 make
 ```
-Pre-compiled files(```connection_to_matrix``` ) are provided for ```DGDVar.py```
+Pre-compiled files(```connection_to_matrix``` ) are provided for ```DGDbaseeditor.py```
 
 For Vienna RNA package see the instruction in their official site https://www.tbi.univie.ac.at/RNA/ for python installation
 The rest packages could be installed by using ```pip``` or ```conda```
