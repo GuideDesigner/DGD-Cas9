@@ -9,7 +9,7 @@ DGD-VAR similar to DGD  is python based on-target scoring method for SpCas9 and 
 
 ### Briefings of python files
 - Github directory contains main files and subsidary python files for the ease of users.
-- Name of main file is ```DGD.py``` which when run will execute all the necessary files and give score as output.
+- Name of main file is ```DGDVar.py``` which when run will execute all the necessary files and give score as output.
 - The input file should be fasta sequence (```.fa```), DGD pipeline can take multiple fasta sequence files.
 - Prior to use of any files both main and accessory, please install the packages as mentioned in ```Requirement``` section.
 
@@ -39,7 +39,7 @@ DGD python files is executed on fasta file
 - For demo purpose the length of fasta file is in range between 100nt to 10000nt
 - The output are shown in ```.csv``` format which compromises of ID,Start,End,Strand, 30nt sequence and on-target score
 ```python
-   python DGD.py input.fa
+   python DGDvar.py input.fa
    
    Example file: input.fa
    
