@@ -935,7 +935,7 @@ def score_deep():
     ID = pd.DataFrame(pop_id, columns=['ID'])
     Score_complete = pd.concat([ID, ABE_SpCas9_score, CBE_SpCas9_score], axis=1, join='outer')
     Merge_str = pd.merge(struct_file, Score_complete, on='ID', how='inner')
-    Merge_str.to_csv("DGD.csv", index=False)
+    Merge_str.to_csv("DGDBE.csv", index=False)
 
 
 def dgdmain(file1):
