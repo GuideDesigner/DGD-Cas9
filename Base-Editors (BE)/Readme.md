@@ -39,7 +39,7 @@ DGD python files is executed on fasta file
 - For demo purpose the length of fasta file is in range between 100nt to 10000nt
 - The output are shown in ```.csv``` format which compromises of ID,Start,End,Strand, 30nt sequence and on-target score
 ```python
-   python DGD.py input.fa
+   python DGDbaseeditor.py input.fa
    
    Example file: input.fa
    
