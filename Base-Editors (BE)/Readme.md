@@ -97,3 +97,17 @@ Q278699.2:423:447	423	447	+	TTCTGTATTGGGAGTGAAAGGCGG	0.69987136	0.14765677
 Q278699.2:1753:1777	1753	1777	+	TTCTGTATTGGGAGTGAAAGGCGG	0.69987136	0.14765677
 JQ277699.1:639:663	639	663	-	TTCCTCCTCCCGAAAGTAGGCTGG	0.007367899	0.24120061
 ```
+## License
+MIT
+## Contributors
+A. Vipin Menon, Jang-il Sohn, Seokju Park and Jin-Wu Nam
+
+Bioinformatic and Genomics Lab., Hanyang University, Seoul 04763, Korea
+
+## Contact
+If you have any issues, please contact us
+
+A. Vipin Menon (a.vipin.menon@gmail.com)
+
+Jin-Wu Nam (jwnam@hanyang.ac.kr)
+
