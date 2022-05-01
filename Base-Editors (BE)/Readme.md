@@ -1,6 +1,6 @@
 # DGD
 =======
-# DGD-VAR (Deep Guide Designer for SpCas9 Variants)
+# DGD-BE (Deep Guide Designer for Adenosine and Cytosine base-editor; ABE and CBE)
 [![Build Status](https://travis-ci.org/joemccann/dillinger.svg?branch=master)](https://travis-ci.org/joemccann/dillinger)
 
 DGD-VAR similar to DGD  is python based on-target scoring method for SpCas9 and variants employing optimal scaffold, which is developed by integrating information from target sequence, biofeatures and spacer-scaffold base-pairing of sgRNA into CNN based deep learning model.
@@ -9,7 +9,7 @@ DGD-VAR similar to DGD  is python based on-target scoring method for SpCas9 and 
 
 ### Briefings of python files
 - Github directory contains main files and subsidary python files for the ease of users.
-- Name of main file is ```DGD.py``` which when run will execute all the necessary files and give score as output.
+- Name of main file is ```DGDbaseeditor.py``` which when run will execute all the necessary files and give score as output.
 - The input file should be fasta sequence (```.fa```), DGD pipeline can take multiple fasta sequence files.
 - Prior to use of any files both main and accessory, please install the packages as mentioned in ```Requirement``` section.
 
