@@ -3,7 +3,7 @@
 # DGD-BE (Deep Guide Designer for Adenosine and Cytosine base-editor; ABE and CBE)
 [![Build Status](https://travis-ci.org/joemccann/dillinger.svg?branch=master)](https://travis-ci.org/joemccann/dillinger)
 
-DGD-VAR similar to DGD  is python based on-target scoring method for SpCas9 and variants employing optimal scaffold, which is developed by integrating information from target sequence, biofeatures and spacer-scaffold base-pairing of sgRNA into CNN based deep learning model.
+DGD-VAR similar to DGD  is python based on-target scoring method for SpCas9 and variants employing optimal scaffold, which is developed by integrating information from target sequence, biofeatures and spacer-scaffold base-pairing of sgRNA into CNN based deep learning model. The length of target sequence for base-editors is 24nt, where the upstream constitutes 1nt, the guide 20nt and the downstream 3nt (3nt; NGG)
 
 ## Source Code
 
