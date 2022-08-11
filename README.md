@@ -123,7 +123,11 @@ Bioinformatic and Genomics Lab., Hanyang University, Seoul 04763, Korea
 ## Contact
 If you have any issues, please contact us
 
+### Principal Investigatore
+Jin-Wu Nam (jwnam@hanyang.ac.kr)
+
+### if he, If he is unavailable, please email 
 A. Vipin Menon (a.vipin.menon@gmail.com)
 
-Jin-Wu Nam (jwnam@hanyang.ac.kr)
+
 
