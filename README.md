@@ -123,7 +123,7 @@ Bioinformatic and Genomics Lab., Hanyang University, Seoul 04763, Korea
 ## Contact
 If you have any issues, please contact us
 
-### Principal Investigatore
+### Principal Investigator
 Jin-Wu Nam (jwnam@hanyang.ac.kr)
 
 ### if he is unavailable, please email 
