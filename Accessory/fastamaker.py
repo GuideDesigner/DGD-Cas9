@@ -1,33 +1,38 @@
-import RNA
-import sys
+#!/usr/bin/env python3
+"""
+Accessory/fastamaker.py — Standalone pipeline step 2
+=====================================================
+Append the sgRNA scaffold sequence to each guide candidate to prepare
+sequences for RNAfold structure prediction.
+Usage: python fastamaker.py [--input Structure_file.csv] [--output Structure_Connection.fa]
+"""
+import argparse
 import os
-import numpy as np
-import pandas as pd
-from collections import defaultdict, OrderedDict
-from Bio.SeqUtils import MeltingTemp as mt
-import itertools
-from itertools import chain
-import make_arrays
-import stacking_model
-import string
-import tensorflow as tf
-from tensorflow.python.client import device_lib
-import tensorflow.keras.backend as kb
-from tensorflow.keras import models, layers, optimizers, losses
+import sys
 
-def fastamaker():
-    file1 = open("Structure_file.csv", 'r')
-    out = open('Structure_Connection.fa', 'w')
-    gout = open('Structure_Connection.csv', 'w')
-    gout.write('ID' + ',' + 'Sequence' + '\n')
-    file1 = file1.readlines()
-    seq = 'GTTTTAGAGCTAGAAATAGCAAGTTAAAATAAGGCTAGTCCGTTATCAACTTGAAAAAGTGGCACCGAGTCGGTGCTTTTTT'
-    del file1[0]
-    for line in file1:
-        info = line.strip().split(',')
-        ids = info[0]
-        sequence = info[4][4:24] + seq
-        out.write('>' + str(ids) + '\n' + str(sequence) + '\n')
-        gout.write(str(ids) + ',' + str(sequence) + '\n')
-    out.close()
-    gout.close()
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from DGD import make_fasta_for_rnafold
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build scaffold-appended FASTA for RNAfold (step 2 of DGD pipeline)."
+    )
+    parser.add_argument(
+        "--input", default="Structure_file.csv",
+        help="Guide candidate CSV (default: Structure_file.csv)"
+    )
+    parser.add_argument(
+        "--fasta-out", default="Structure_Connection.fa",
+        help="Output FASTA file (default: Structure_Connection.fa)"
+    )
+    parser.add_argument(
+        "--csv-out", default="Structure_Connection.csv",
+        help="Output CSV file (default: Structure_Connection.csv)"
+    )
+    args = parser.parse_args()
+    make_fasta_for_rnafold(args.input, args.fasta_out, args.csv_out)
+
+
+if __name__ == "__main__":
+    main()

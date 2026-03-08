@@ -1,28 +1,33 @@
-import RNA
-import sys
+#!/usr/bin/env python3
+"""
+Accessory/spacerscaffold.py — Standalone pipeline step 7
+=========================================================
+Extract spacer–scaffold base-pair columns from the full connection matrix.
+Usage: python spacerscaffold.py [--input Structure_basepairs.csv] [--output spacer_scaffold_basepairs.csv]
+"""
+import argparse
 import os
-import numpy as np
-import pandas as pd
-from collections import defaultdict, OrderedDict
-from Bio.SeqUtils import MeltingTemp as mt
-import itertools
-from itertools import chain
-import make_arrays
-import stacking_model
-import string
-import tensorflow as tf
-from tensorflow.python.client import device_lib
-import tensorflow.keras.backend as kb
-from tensorflow.keras import models, layers, optimizers, losses
-def spacerscaffold():
-    conn_d = pd.read_csv('Structure_basepairs.csv')
-    a = []
+import sys
 
-    for i in range(1, 21):
-        for j in range(21, 103):
-            n = 'Connection_Pos' + str(i) + '_Pos' + str(j)
-            a.append(n)
-    a.extend(['ID'])
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from DGD import extract_spacer_scaffold_pairs
 
-    newdf = pd.DataFrame(conn_d, columns=a)
-    newdf.to_csv("spacer_scaffold_basepairs.csv", index=False)
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Extract spacer–scaffold base pairs (step 7 of DGD pipeline)."
+    )
+    parser.add_argument(
+        "--input", default="Structure_basepairs.csv",
+        help="Full connection matrix CSV (default: Structure_basepairs.csv)"
+    )
+    parser.add_argument(
+        "--output", default="spacer_scaffold_basepairs.csv",
+        help="Output spacer–scaffold CSV (default: spacer_scaffold_basepairs.csv)"
+    )
+    args = parser.parse_args()
+    extract_spacer_scaffold_pairs(args.input, args.output)
+
+
+if __name__ == "__main__":
+    main()

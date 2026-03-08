@@ -1,2 +1,0 @@
-default:
-	cd Accessory ; make

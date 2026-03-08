@@ -1,31 +1,33 @@
-import RNA
-import sys
+#!/usr/bin/env python3
+"""
+Accessory/spacerconnectionfrequency.py — Standalone pipeline step 8
+====================================================================
+Build connection-frequency position metadata from spacer–scaffold base pairs.
+Usage: python spacerconnectionfrequency.py [--input spacer_scaffold_basepairs.csv] [--output spacer_scaffold_feature.csv]
+"""
+import argparse
 import os
-import numpy as np
-import pandas as pd
-from collections import defaultdict, OrderedDict
-from Bio.SeqUtils import MeltingTemp as mt
-import itertools
-from itertools import chain
-import make_arrays
-import stacking_model
-import string
-import tensorflow as tf
-from tensorflow.python.client import device_lib
-import tensorflow.keras.backend as kb
-from tensorflow.keras import models, layers, optimizers, losses
+import sys
 
-def spacerconnectionfrequency():
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from DGD import compute_connection_frequency
 
-    connection = pd.read_csv("spacer_scaffold_basepairs.csv")
-    cons = connection.set_index('ID').T.reset_index()
 
-    cons_info = cons[cons.columns[0]]
-    cons_info = pd.DataFrame(cons_info)
-    cons_info[['nucleotide', 'Pos_A', 'Pos_B']] = pd.DataFrame(
-        [x.split('_') for x in cons_info[cons_info.columns[0]].tolist()])
-    cons_info = cons_info.drop('nucleotide', axis=1)
-    cons_info['Pos_A'] = cons_info['Pos_A'].str.extract('(\d+)', expand=False)
-    cons_info['Pos_B'] = cons_info['Pos_B'].str.extract('(\d+)', expand=False)
-    cons_info.columns = ['nucleotide', 'Pos_A', 'Pos_B']
-    cons_info.to_csv("spacer_scaffold_feature.csv", index=False)
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build connection frequency table (step 8 of DGD pipeline)."
+    )
+    parser.add_argument(
+        "--input", default="spacer_scaffold_basepairs.csv",
+        help="Spacer–scaffold base-pair CSV (default: spacer_scaffold_basepairs.csv)"
+    )
+    parser.add_argument(
+        "--output", default="spacer_scaffold_feature.csv",
+        help="Output feature CSV (default: spacer_scaffold_feature.csv)"
+    )
+    args = parser.parse_args()
+    compute_connection_frequency(args.input, args.output)
+
+
+if __name__ == "__main__":
+    main()

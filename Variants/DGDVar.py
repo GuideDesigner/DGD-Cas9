@@ -1,661 +1,520 @@
-import RNA
-import sys
+#!/usr/bin/env python3
+"""
+Variants/DGDVar.py — DGD pipeline for broad-PAM Cas9 variant scoring
+=====================================================================
+Authors : Vipin Menon, Jang-il Sohn, Seokju Park, Jin-Wu Nam
+Lab     : Bioinformatics & Genomics Lab, Hanyang University, Seoul 04763, Korea
+Contact : a.vipin.menon@gmail.com | jwnam@hanyang.ac.kr
+Original: August 2021 | Modernized: 2026
+
+Scores CRISPR-Cas9 sgRNA candidates against 9 SpCas9 variant models using the
+DGD CNN ensemble. Unlike DGD.py (NGG-only), DGDVar scans ALL 16 dinucleotide
+PAMs to support xCas9, SpCas9-NG, and other broad-PAM Cas9 variants.
+
+Usage:
+    python DGDVar.py input.fa
+    python DGDVar.py input.fa --output results.csv --models ./models
+
+Output columns (DGDVar.csv):
+    DGDSpCas9, DGDeSpCas9, DGDHypaCas9, DGDSpCas9Hf1, DGDSniperCas9,
+    DGDevoCas9, DGDxCas9, DGDSpCas9VRQR, DGDSpCas9NG
+"""
+
+import argparse
+import logging
 import os
+import subprocess
+import sys
+from collections import OrderedDict, defaultdict
+from itertools import chain
+from typing import Dict, List, Tuple
+
 import numpy as np
 import pandas as pd
-from collections import defaultdict, OrderedDict
+import RNA
 from Bio.SeqUtils import MeltingTemp as mt
-import itertools
-from itertools import chain
-import make_arrays
-import stacking_model
-import string
-import tensorflow as tf
-from tensorflow.python.client import device_lib
-import tensorflow.keras.backend as kb
-from tensorflow.keras import models, layers, optimizers, losses
-
-
-def reverseString(st):
-    li = []
-    for i in st:
-        li.append(i)
-    li.reverse()
-    return ''.join(li)
-
-
-def reverseComp(st):
-    comp = str.maketrans('ATCG', 'TAGC')
-    return reverseString(st).translate(comp)
-
-
-def targetsequence():
-    sequence = open("Structure_file.csv", 'r')
-    out = open("Target_sequence_feature.csv", 'w')
-    header = list(map(lambda x: 'A' + str(x), range(1, 31))) + list(map(lambda x: 'T' + str(x), range(1, 31))) + list(map(lambda x: 'G' + str(x), range(1, 31))) + list(map(lambda x: 'C' + str(x), range(1, 31))) + list(map(lambda x: 'AA'+str(x), range(1, 30))) + list(map(lambda x: 'TA' + str(x), range(1, 30))) + list(map(lambda x: 'GA' + str(x), range(1, 30))) + list(map(lambda x: 'CA' + str(x), range(1, 30))) + list(map(lambda x: 'AT' + str(x), range(1, 30))) + list(map(lambda x: 'TT' + str(x), range(1, 30))) + \
-        list(map(lambda x: 'GT' + str(x), range(1, 30))) + list(map(lambda x: 'CT' + str(x), range(1, 30))) + list(map(lambda x: 'AG' + str(x), range(1, 30))) + list(map(lambda x: 'TG' + str(x), range(1, 30))) + list(map(lambda x: 'GG' + str(x), range(1, 30))) + \
-        list(map(lambda x: 'CG' + str(x), range(1, 30))) + list(map(lambda x: 'AC' + str(x), range(1, 30))) + list(map(lambda x: 'TC' +
-                                                                                                                       str(x), range(1, 30))) + list(map(lambda x: 'GC' + str(x), range(1, 30))) + list(map(lambda x: 'CC' + str(x), range(1, 30)))
-    out.write('ID' + ',')
-    out.write(','.join(header))
-    out.write(',' + 'Entropy' + ',' + 'Energy' + ',' + 'GCcount' + ',' + 'Gchigh' + ',' + 'GClow' + ',' + 'MeltingTemperature' + ',' + 'A' + ',' + 'T' + ',' + 'G' + ',' + 'C' + ',' + 'AA' + ',' + 'AT' +
-              ',' + 'AG' + ',' + 'AC' + ',' + 'CA' + ',' + 'CG' + ',' + 'CC' + ',' + 'CT' + ',' + 'GA' + ',' + 'GC' + ',' + 'GG' + ',' + 'GT' + ',' + 'TA' + ',' + 'TC' + ',' + 'TG' + ',' + 'TT' + '\n')
-    sequence = sequence.readlines()
-    del sequence[0]
-    l = []
-    dinuct = []
-    ene = {}
-    ent = {}
-    ext = {}
-    dt = {}
-    nt = {}
-    PosA = {}
-    PosT = {}
-    PosC = {}
-    PosG = {}
-    Tm = {}
-    PosAA = {}
-    PosAT = {}
-    PosAG = {}
-    PosAC = {}
-    PosCA = {}
-    PosCC = {}
-    PosCG = {}
-    PosCT = {}
-    PosGA = {}
-    PosGC = {}
-    PosGG = {}
-    PosGT = {}
-    PosTA = {}
-    PosTC = {}
-    PosTG = {}
-    PosTT = {}
-    gc = {}
-    gc_high = {}
-    gc_low = {}
-    nuc = ['A', 'T', 'G', 'C']
-    nas = []
-    merged_dict = defaultdict(list)
-    sigma_dict = defaultdict(list)
-    # ntscount = {'A':0, 'G':0, 'T':0, 'C':0}
-    for j in range(0, len(nuc)):
-        for t in range(0, len(nuc)):
-            p = str(nuc[t]) + str(nuc[j])
-            dinuct.append(p)
-    for line in sequence:
-        seq = line.strip().split(',')
-    #	number = seq[2]
-        indel = seq[2]
-        complete_sequence = seq[4]
-        ids = seq[0]
-        target_sequence = complete_sequence[4:24].upper()
-    #	start = complete_sequence.find(target_sequence)
-    #	newstart = start - 21
-    #	newend = int(len(target_sequence))  + 21
-        Extended_sequence = complete_sequence.upper()
-
-    #	print len(Extended_sequence),Extended_sequence
-        ext[ids] = indel
-        nt[ids] = []
-        dt[ids] = []
-        ent[ids] = []
-        ene[ids] = []
-        PosA[ids] = []
-        PosT[ids] = []
-        PosC[ids] = []
-        PosG[ids] = []
-        PosAA[ids] = []
-        PosAT[ids] = []
-        PosAG[ids] = []
-        PosAC[ids] = []
-        PosGA[ids] = []
-        PosGC[ids] = []
-        PosGG[ids] = []
-        PosGT[ids] = []
-        PosCA[ids] = []
-        PosCG[ids] = []
-        PosCC[ids] = {}
-        PosCT[ids] = []
-        PosTA[ids] = []
-        PosTG[ids] = []
-        PosTC[ids] = []
-        PosTT[ids] = []
-        Tm[ids] = []
-        gc[ids] = []
-        gc_high[ids] = []
-        gc_low[ids] = []
-        for y in range(0, len(nuc)):
-            for x in range(0, len(Extended_sequence)):
-                if nuc[y] in Extended_sequence[x]:
-                    Count = str(1)
-                    nt[ids].append(Count)
-                else:
-
-                    Count = str(0)
-                    nt[ids].append(Count)
-
-        for w in range(0, len(dinuct)):
-            for z in range(0, len(Extended_sequence)-1):
-                if dinuct[w] == Extended_sequence[z:z+2]:
-                    Count = str(1)
-                    dt[ids].append(Count)
-                else:
-                    Count = str(0)
-                    dt[ids].append(Count)
-
-        entropy = dict()
-        Entropycal = []
-        entropy_seq = target_sequence
-        lentseq = len(entropy_seq)
-        ntscount = {'A': 0, 'G': 0, 'T': 0, 'C': 0}
-        for ant in nuc:
-            ntscount[ant] = (entropy_seq.count(ant))/float((lentseq))
-        for ant in nuc:
-            if ntscount[ant] != 0:
-                entropy[ant] = -(ntscount[ant]*np.log2(ntscount[ant]))
-            else:
-                entropy[ant] = 0
-
-        entropySum = sum(entropy.values())
-        entropySumR = round(entropySum, 1)
-        ent[ids] = str(entropySumR)
-        Energy = target_sequence
-        Energycal = RNA.fold(Energy)[-1]
-        Energycal = round(Energycal, 0)
-        ene[ids] = str(Energycal)
-        PosA[ids] = str(Extended_sequence.count('A'))
-        PosC[ids] = str(Extended_sequence.count('C'))
-        PosT[ids] = str(Extended_sequence.count('T'))
-        PosG[ids] = str(Extended_sequence.count('G'))
-        Tm[ids] = str(mt.Tm_NN(target_sequence))
-        PosA[ids] = str(Extended_sequence.count('A'))
-        PosT[ids] = str(Extended_sequence.count('T'))
-        PosG[ids] = str(Extended_sequence.count('G'))
-        PosC[ids] = str(Extended_sequence.count('C'))
-        PosAA[ids] = str(Extended_sequence.count('AA'))
-        PosAT[ids] = str(Extended_sequence.count('AT'))
-        PosAG[ids] = str(Extended_sequence.count('AG'))
-        PosAC[ids] = str(Extended_sequence.count('AC'))
-        PosCA[ids] = str(Extended_sequence.count('CA'))
-        PosCC[ids] = str(Extended_sequence.count('CC'))
-        PosCG[ids] = str(Extended_sequence.count('CG'))
-        PosCT[ids] = str(Extended_sequence.count('CT'))
-        PosCC[ids] = str(Extended_sequence.count('CC'))
-        PosGA[ids] = str(Extended_sequence.count('GA'))
-        PosGC[ids] = str(Extended_sequence.count('GC'))
-        PosGG[ids] = str(Extended_sequence.count('GG'))
-        PosGT[ids] = str(Extended_sequence.count('GT'))
-        PosTA[ids] = str(Extended_sequence.count('TA'))
-        PosTC[ids] = str(Extended_sequence.count('TC'))
-        PosTG[ids] = str(Extended_sequence.count('TG'))
-        PosTT[ids] = str(Extended_sequence.count('TT'))
-        gc_content = (target_sequence.count(
-            'G') + target_sequence.count('C'))/float(len(target_sequence)) * 100
-        gc_content = round(gc_content, 0)
-        gc_count = (target_sequence.count('G') + target_sequence.count('C'))
-        gc[ids] = str(gc_content)
-        if gc_count < int(10):
-            alpha = str(1)
-        else:
-            alpha = str(0)
-        if gc_count >= int(10):
-            beta = str(1)
-        else:
-            beta = str(0)
-
-        gc_low[ids] = alpha
-        gc_high[ids] = beta
-
-    # for t,v in nt.items():
-    #	v = ''.join[v]
-    for key, value in nt.items():
-        nt[key] = ','.join(value)
-    for key, value in dt.items():
-        dt[key] = ','.join(value)
-#	print nt,dt
-
-    dict_list = [nt, dt, ent, ene, gc, gc_high, gc_low, Tm, PosA, PosT, PosG, PosC, PosAA, PosAT, PosAG,
-                 PosAC, PosCA, PosCC, PosCG, PosCT, PosGA, PosGC, PosGG, PosGT, PosTA, PosTC, PosTG, PosTT]
-
-    for dicts in dict_list:
-        for k, v in dicts.items():
-            merged_dict[k].append(v)
-#	print merged_dict
-    for key, value in (merged_dict.items()):
-        sigma_dict[key] = ','.join((value))
-
-    for key, value in sorted(sigma_dict.items()):
-        out.write(str(key) + ',' + str(value) + '\n')
-    out.close()
-
-
-def Connectstr():
-    f1 = open("Structure_Connection.outs", 'r')
-    f1 = f1.readlines()
-    mac = []
-    sara = {}
-    a = []
-    kt = []
-    header = map(lambda x: 'Pos' + str(x), range(1, 113))
-    n = 'ID'
-    a.append(n)
-    a.extend(header)
-
-    for line in f1:
-        info = line.strip().split(' ')
-        info_list = list(filter(None, info))
-
-        if len(info_list) == 5:
-
-            mykey = info_list[4]
-            sara[mykey] = []
-
-        else:
-            sara[mykey].append(info_list[4])
-
-    df = pd.DataFrame.from_dict(sara, orient='index')
-    df.to_csv("Structure_Cas9_out.txt", sep="\t", header=False)
-    df = pd.read_csv("Structure_Cas9_out.txt", sep="\t", names=a)
-    df.to_csv("Structure_out.txt", sep="\t", index=False)
-    os.remove("Structure_Cas9_out.txt")
-
-
-def spacerscaffold():
-    conn_d = pd.read_csv('Structure_basepairs.csv')
-    a = []
-
-    for i in range(1, 21):
-        for j in range(21, 113):
-            n = 'Connection_Pos' + str(i) + '_Pos' + str(j)
-            a.append(n)
-    a.extend(['ID'])
-
-    newdf = pd.DataFrame(conn_d, columns=a)
-    newdf.to_csv("spacer_scaffold_basepairs.csv", index=False)
-
-
-def spacerconnectionfrequency():
-
-    connection = pd.read_csv("spacer_scaffold_basepairs.csv")
-    cons = connection.set_index('ID').T.reset_index()
-
-    cons_info = cons[cons.columns[0]]
-    cons_info = pd.DataFrame(cons_info)
-    cons_info[['nucleotide', 'Pos_A', 'Pos_B']] = pd.DataFrame(
-        [x.split('_') for x in cons_info[cons_info.columns[0]].tolist()])
-    cons_info = cons_info.drop('nucleotide', axis=1)
-    cons_info['Pos_A'] = cons_info['Pos_A'].str.extract('(\d+)', expand=False)
-    cons_info['Pos_B'] = cons_info['Pos_B'].str.extract('(\d+)', expand=False)
-    cons_info.columns = ['nucleotide', 'Pos_A', 'Pos_B']
-    cons_info.to_csv("spacer_scaffold_feature.csv", index=False)
-
-
-def serialconnection():
-    spacer_scaffold = pd.read_csv('spacer_scaffold_feature.csv')
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 33) & (
-        spacer_scaffold.Pos_B <= 36), 'Structure'] = 'TL'
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 54) & (
-        spacer_scaffold.Pos_B <= 58), 'Structure'] = 'SL1'
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 73) & (
-        spacer_scaffold.Pos_B <= 76), 'Structure'] = 'SL2'
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 88) & (
-        spacer_scaffold.Pos_B <= 90), 'Structure'] = 'SL3'
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 21) & (
-        spacer_scaffold.Pos_B <= 32), 'Structure'] = 'R'
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 37) & (
-        spacer_scaffold.Pos_B <= 49), 'Structure'] = 'AR'
-    spacer_scaffold.loc[(spacer_scaffold.Pos_B >= 63) & (
-        spacer_scaffold.Pos_B <= 67), 'Structure'] = 'LR'
-    spacer_scaffold.Structure.fillna('NS', inplace=True)
-    spacer_scaffold.to_csv("Structural_annotation.csv", index=False)
-
-
-def featuremaker():
-
-    Connection_bp = pd.read_csv("spacer_scaffold_basepairs.csv")
-    Sequence = pd.read_csv("Target_sequence_feature.csv")
-    Serial_Conn = pd.read_csv("Structural_annotation.csv")
-    Serial_conn_info_NS = Serial_Conn[(Serial_Conn.Structure == 'NS')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_AR = Serial_Conn[(Serial_Conn.Structure == 'AR')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_R = Serial_Conn[(Serial_Conn.Structure == 'R')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_LR = Serial_Conn[(Serial_Conn.Structure == 'LR')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_SL1 = Serial_Conn[(Serial_Conn.Structure == 'SL1')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_SL2 = Serial_Conn[(Serial_Conn.Structure == 'SL2')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_SL3 = Serial_Conn[(Serial_Conn.Structure == 'SL3')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-    Serial_conn_info_TL = Serial_Conn[(Serial_Conn.Structure == 'TL')][[
-        "nucleotide", "Pos_A", "Pos_B", "Structure"]]
-
-    position_list = [x for x in range(1, 21)]
-
-    PosA = Serial_conn_info_AR[["Pos_A"]]
-
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-
-    nested_AR = {}
-    C_AR = {}
-    for x in range(0, len(newlist)):
-        AR = {}
-        name = 'AR' + str(newlist[x])
-        my_list = Serial_conn_info_AR[(Serial_conn_info_AR.Pos_A == newlist[x])][[
-            "nucleotide"]]
-
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    AR[key] = 1
-                else:
-                    AR[key] = 0
-        nested_AR[name] = (AR)
-
-    AR = pd.DataFrame(nested_AR)
-    AR['Total_AR'] = AR.sum(axis=1)
-    AR.index.name = 'ID'
-    AR.reset_index(inplace=True)
-   # total_AR.index.name = 'ID'
-   # total_AR.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_NS[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-
-    nested_NS = {}
-    C_NS = {}
-    for x in range(0, len(newlist)):
-        NS = {}
-        name = 'NS' + str(newlist[x])
-        my_list = Serial_conn_info_NS[(Serial_conn_info_NS.Pos_A == newlist[x])][[
-            "nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    NS[key] = 1
-                    C_NS[key] = sum(value)
-                else:
-                    NS[key] = 0
-        nested_NS[name] = (NS)
-    NS = pd.DataFrame(nested_NS)
-    NS['Total_NS'] = NS.sum(axis=1)
-    NS.index.name = 'ID'
-    NS.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_R[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-
-    nested_R = {}
-    C_R = {}
-    for x in range(0, len(newlist)):
-        R = {}
-        name = 'R' + str(newlist[x])
-        my_list = Serial_conn_info_R[(Serial_conn_info_R.Pos_A == newlist[x])][[
-            "nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    R[key] = 1
-                    C_R[key] = sum(value)
-                else:
-                    R[key] = 0
-        nested_R[name] = (R)
-    R = pd.DataFrame(nested_R)
-    R['Total_R'] = R.sum(axis=1)
-    R.index.name = 'ID'
-    R.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_SL1[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-    nested_SL1 = {}
-    C_SL1 = {}
-    for x in range(0, len(newlist)):
-        SL1 = {}
-        name = 'SL1_' + str(newlist[x])
-        my_list = Serial_conn_info_SL1[(
-            Serial_conn_info_SL1.Pos_A == newlist[x])][["nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    SL1[key] = 1
-                    C_SL1[key] = sum(value)
-                else:
-                    SL1[key] = 0
-        nested_SL1[name] = SL1
-    SL1 = pd.DataFrame(nested_SL1)
-    SL1['Total_SL1'] = SL1.sum(axis=1)
-    SL1.index.name = 'ID'
-    SL1.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_LR[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-    nested_LR = {}
-    C_LR = {}
-    for x in range(0, len(newlist)):
-        LR = {}
-        name = 'LR' + str(newlist[x])
-        my_list = Serial_conn_info_LR[(Serial_conn_info_LR.Pos_A == newlist[x])][[
-            "nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    LR[key] = 1
-                    C_LR[key] = sum(value)
-                else:
-                    LR[key] = 0
-        nested_LR[name] = LR
-    LR = pd.DataFrame(nested_LR)
-    LR['Total_LR'] = LR.sum(axis=1)
-    LR.index.name = 'ID'
-    LR.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_SL2[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-    nested_SL2 = {}
-    C_SL2 = {}
-    for x in range(0, len(newlist)):
-        SL2 = {}
-        name = 'SL2_' + str(newlist[x])
-        my_list = Serial_conn_info_SL2[(
-            Serial_conn_info_SL2.Pos_A == newlist[x])][["nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    SL2[key] = 1
-                    C_SL2[key] = sum(value)
-                else:
-                    SL2[key] = 0
-        nested_SL2[name] = SL2
-    SL2 = pd.DataFrame(nested_SL2)
-    SL2['Total_SL2'] = SL2.sum(axis=1)
-    SL2.index.name = 'ID'
-    SL2.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_SL3[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-    nested_SL3 = {}
-    C_SL3 = {}
-    for x in range(0, len(newlist)):
-        SL3 = {}
-        name = 'SL3_' + str(newlist[x])
-        my_list = Serial_conn_info_SL3[(
-            Serial_conn_info_SL3.Pos_A == newlist[x])][["nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    SL3[key] = 1
-                    C_SL3[key] = sum(value)
-                else:
-                    SL3[key] = 0
-        nested_SL3[name] = SL3
-    SL3 = pd.DataFrame(nested_SL3)
-    SL3['Total_SL3'] = SL3.sum(axis=1)
-    SL3.index.name = 'ID'
-    SL3.reset_index(inplace=True)
-
-    PosA = Serial_conn_info_TL[["Pos_A"]]
-    PosA = PosA.values.tolist()
-    flat_list = list(set([item for sublist in PosA for item in sublist]))
-
-    newlist = sorted(flat_list, reverse=True)
-    nested_TL = {}
-    C_TL = {}
-    for x in range(0, len(newlist)):
-        TL = {}
-        name = 'TL_' + str(newlist[x])
-        my_list = Serial_conn_info_TL[(Serial_conn_info_TL.Pos_A == newlist[x])][[
-            "nucleotide"]]
-        mylist = my_list.values.tolist()
-        palist = list(set([item for sublist in mylist for item in sublist]))
-        Connection_information = Connection_bp[palist]
-        value = Connection_bp[['ID']]
-        Connection_information.insert(0, 'ID', value)
-
-        my_id_dict = Connection_information.set_index('ID').T.to_dict('list')
-        for key, value in my_id_dict.items():
-            for x in range(0, len(value)):
-                if sum(value) > 0:
-                    TL[key] = 1
-                    C_TL[key] = sum(value)
-                else:
-                    TL[key] = 0
-        nested_TL[name] = TL
-    TL = pd.DataFrame(nested_TL)
-    TL['Total_TL'] = TL.sum(axis=1)
-    TL.index.name = 'ID'
-    TL.reset_index(inplace=True)
-    Conn = pd.concat([R['Total_R'], TL['Total_TL'], AR['Total_AR'], SL1['Total_SL1'],
-                      LR['Total_LR'], SL2['Total_SL2'], SL3['Total_SL3'], NS['Total_NS']], axis=1, join='outer')
-    total = pd.DataFrame(Conn.sum(axis=1))
-
-    total.columns = ["Total_Connection"]
-
-    R = R.drop(["ID"], axis=1)
-    LR = LR.drop(["ID"], axis=1)
-    SL1 = SL1.drop(["ID"], axis=1)
-    SL2 = SL2.drop(["ID"], axis=1)
-    SL3 = SL3.drop(["ID"], axis=1)
-    TL = TL.drop(["ID"], axis=1)
-    NS = NS.drop(["ID"], axis=1)
-    Connection = pd.concat(
-        [AR, R, LR, SL2, TL, NS, SL1, SL3, total], axis=1, join='outer')
-#    Connection[['ID', 'INDEL']] = Connection['ID'].str.split(':', 1, expand=True)
-#    Connection['INDEL'] = Connection['INDEL'].astype(float)
-#    Sequence['INDEL'] = Sequence['INDEL'].astype(float)
-    Connection_sequence = Sequence.merge(Connection, on=['ID'], how='inner')
-
-    Connection_sequence.to_csv("Feature_Data_Spacer_Scaffold.csv", index=False)
-
-
-def read_dot_bracket_format_file(file_name):
+from tensorflow.keras import models as tf_models
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from make_arrays import (
+    adjust_partner_index,
+    return_connection_length,
+    return_dimers_array,
+    return_masked_array,
+    return_partner_base,
+    return_partner_index,
+)
+from sequence_utils import parse_fasta, reverse_complement
+from stacking_model import return_stacking_model
+
+logger = logging.getLogger(__name__)
+
+# Scaffold sequence for SpCas9 variants (xCas9/SpCas9-NG optimized)
+_SCAFFOLD_VAR: str = (
+    "GTTTCAGAGCTATGCTGGAAACAGCATAGCAAGTTGAAATAAGGCTAGTCC"
+    "GTTATCAACTTGAAAAAGTGGCACCGAGTCGGTGCTTTTTT"
+)
+
+# All 16 dinucleotide PAM sequences for broad-PAM scanning
+_ALL_PAMS: List[str] = [
+    "GG", "AA", "AT", "AG", "AC", "GA", "GT", "GC",
+    "TA", "TT", "TG", "TC", "CA", "CT", "CG", "CC",
+]
+
+
+class PipelineFiles:
+    """Centralised store for all intermediate pipeline file paths."""
+    STRUCTURE_FILE:             str = "Structure_file.csv"
+    STRUCTURE_CONN_FA:          str = "Structure_Connection.fa"
+    STRUCTURE_CONN_CSV:         str = "Structure_Connection.csv"
+    STRUCTURE_CONN_OUT:         str = "Structure_Connection.out"
+    STRUCTURE_CONN_OUTS:        str = "Structure_Connection.outs"
+    STRUCTURE_OUT:              str = "Structure_out.txt"
+    STRUCTURE_BASEPAIRS:        str = "Structure_basepairs.csv"
+    SPACER_SCAFFOLD_BP:         str = "spacer_scaffold_basepairs.csv"
+    SPACER_SCAFFOLD_FEATURE:    str = "spacer_scaffold_feature.csv"
+    STRUCTURAL_ANNOTATION:      str = "Structural_annotation.csv"
+    TARGET_FEATURES:            str = "Target_sequence_feature.csv"
+    FEATURE_DATA:               str = "Feature_Data_Spacer_Scaffold.csv"
+    DEEP_LEARNING_FILE:         str = "Deep_learning_file.csv"
+    STRUCTURE_CAS9_TMP:         str = "Structure_Cas9_out.txt"
+
+
+def _run_command(cmd: List[str], *, shell: bool = False, description: str = "") -> None:
+    """Run an external command, raising RuntimeError on failure."""
+    result = subprocess.run(cmd, shell=shell, capture_output=True, text=True)
+    if result.returncode != 0:
+        msg = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(
+            f"Command failed{' (' + description + ')' if description else ''}: {msg}"
+        )
+
+
+def scan_guides(fasta_path: str, output_path: str = PipelineFiles.STRUCTURE_FILE) -> None:
     """
-    Read a file in the RNAfold' Dot-bracket format:
-    read 3 rows at each time, the first row is the sequence ID, the second row is the sequence, the third row is the Dot-bracket structure
-    {'ID': [sequence, structure, free-energey], ...}
+    Step 1: Scan a FASTA file for all guide candidates across all 16 dinucleotide PAMs.
+
+    Args:
+        fasta_path: Input FASTA file (100–10,000 nt sequences).
+        output_path: Output CSV path for guide candidates.
     """
-    file = open(file_name, 'r')
-    ID_sequence_structure_energy = {}
-    lines = file.readlines()
-    for i in range(len(lines)):
-        if (i % 3 == 0):
-            tmp = lines[i]
-#            ID = tmp[1:tmp.find(':')]
-            ID = tmp[1:].strip('\n')
-            ID_sequence_structure_energy[ID] = []
-        elif (i % 3 == 1):
-            sequence = lines[i]
-            ID_sequence_structure_energy[ID].append(
-                sequence[:sequence.find('\n')])
-        elif (i % 3 == 2):
-            structure = lines[i]
-            ID_sequence_structure_energy[ID].append(
-                structure[:structure.rfind('(')])
-            ID_sequence_structure_energy[ID].append(
-                structure[structure.rfind('('):structure.find('\n')])
-    file.close()
-    return ID_sequence_structure_energy
+    guide_fwd: Dict[str, list] = {}
+    guide_rev: Dict[str, list] = {}
+
+    for seq_id, sequence in parse_fasta(fasta_path):
+        seq_len = len(sequence)
+        if not (100 <= seq_len <= 10_000):
+            logger.warning("Skipping %s: length %d outside [100, 10000]", seq_id, seq_len)
+            continue
+
+        for pam in _ALL_PAMS:
+            rc_pam = reverse_complement(pam)
+            pos = 0
+            while True:
+                st = sequence.find(pam, pos)
+                if st == -1:
+                    break
+                pos = st + 1
+                if 25 < st < seq_len - 5:
+                    nstart = st - 25
+                    nend   = st + 5
+                    seq_win = sequence[nstart:nend]
+                    idn = f"{seq_id}:{nstart}:{nend}:+"
+                    guide_fwd[idn] = [nstart, nend, "+", seq_win]
+
+            pos = 0
+            while True:
+                st = sequence.find(rc_pam, pos)
+                if st == -1:
+                    break
+                pos = st + 1
+                if 3 < st < seq_len - 27:
+                    nstart = st - 3
+                    nend   = st + 27
+                    seq_win = sequence[nstart:nend]
+                    rc_win  = reverse_complement(seq_win)
+                    idn = f"{seq_id}:{nstart}:{nend}:-"
+                    guide_rev[idn] = [nstart, nend, "-", rc_win]
+
+    all_guides = dict(chain(guide_fwd.items(), guide_rev.items()))
+    sorted_guides = OrderedDict(sorted(all_guides.items(), key=lambda x: x[1][3], reverse=True))
+
+    with open(output_path, "w", encoding="utf-8") as out:
+        out.write("ID,Start,End,Strand,Sequence\n")
+        for gid, vals in sorted_guides.items():
+            out.write(f"{gid},{vals[0]},{vals[1]},{vals[2]},{vals[3]}\n")
+
+    logger.info("Wrote %d guide candidates → %s", len(sorted_guides), output_path)
 
 
-# count mono-nucleotide
-def count_monomer(sequence, partner_index):
+def make_fasta_for_rnafold(
+    structure_file: str = PipelineFiles.STRUCTURE_FILE,
+    fasta_out: str = PipelineFiles.STRUCTURE_CONN_FA,
+    csv_out: str = PipelineFiles.STRUCTURE_CONN_CSV,
+) -> None:
     """
-    Input: sequence, partner_base
-    Return the number of mono-nucleotide
+    Step 2: Append the sgRNA scaffold to each guide (positions 4:24) and write FASTA.
+
+    Args:
+        structure_file: Guide candidate CSV.
+        fasta_out: Output FASTA file for RNAfold.
+        csv_out: Output CSV with ID and full sequence.
     """
-    monomer = {}
-    monomer = {'A': 0, 'C': 0, 'G': 0, 'U': 0}
+    with (
+        open(structure_file, "r", encoding="utf-8") as fh,
+        open(fasta_out, "w", encoding="utf-8") as fa,
+        open(csv_out, "w", encoding="utf-8") as csv_fh,
+    ):
+        csv_fh.write("ID,Sequence\n")
+        lines = fh.readlines()[1:]  # skip header
+        for line in lines:
+            info = line.strip().split(",")
+            seq_id = info[0]
+            guide  = info[4][4:24] + _SCAFFOLD_VAR
+            fa.write(f">{seq_id}\n{guide}\n")
+            csv_fh.write(f"{seq_id},{guide}\n")
+
+    logger.info("Wrote scaffold-appended sequences → %s", fasta_out)
+
+
+def compute_target_features(
+    structure_file: str = PipelineFiles.STRUCTURE_FILE,
+    output_path: str = PipelineFiles.TARGET_FEATURES,
+) -> None:
+    """
+    Step 3: Compute one-hot encoding, entropy, free energy, GC content, and Tm for each guide.
+
+    Args:
+        structure_file: Guide candidate CSV.
+        output_path: Output feature CSV.
+    """
+    nuc = ["A", "T", "G", "C"]
+    dinuct: List[str] = [f"{b}{a}" for a in nuc for b in nuc]
+
+    header = (
+        [f"A{i}" for i in range(1, 31)] +
+        [f"T{i}" for i in range(1, 31)] +
+        [f"G{i}" for i in range(1, 31)] +
+        [f"C{i}" for i in range(1, 31)] +
+        [f"{d}{i}" for d in ["AA","TA","GA","CA","AT","TT","GT","CT",
+                              "AG","TG","GG","CG","AC","TC","GC","CC"]
+         for i in range(1, 30)]
+    )
+    extra_cols = (
+        "Entropy,Energy,GCcount,Gchigh,GClow,MeltingTemperature,"
+        "A,T,G,C,AA,AT,AG,AC,CA,CG,CC,CT,GA,GC,GG,GT,TA,TC,TG,TT"
+    )
+
+    merged: defaultdict = defaultdict(list)
+    sigma: defaultdict = defaultdict(list)
+
+    nt: Dict[str, list] = {}
+    dt: Dict[str, list] = {}
+    ent: Dict[str, str] = {}
+    ene: Dict[str, str] = {}
+    gc: Dict[str, str] = {}
+    gc_high: Dict[str, str] = {}
+    gc_low: Dict[str, str] = {}
+    Tm_map: Dict[str, str] = {}
+    PosA: Dict[str, str] = {}
+    PosT: Dict[str, str] = {}
+    PosG: Dict[str, str] = {}
+    PosC: Dict[str, str] = {}
+    PosAA: Dict[str, str] = {}
+    PosAT: Dict[str, str] = {}
+    PosAG: Dict[str, str] = {}
+    PosAC: Dict[str, str] = {}
+    PosCA: Dict[str, str] = {}
+    PosCC: Dict[str, str] = {}
+    PosCG: Dict[str, str] = {}
+    PosCT: Dict[str, str] = {}
+    PosGA: Dict[str, str] = {}
+    PosGC: Dict[str, str] = {}
+    PosGG: Dict[str, str] = {}
+    PosGT: Dict[str, str] = {}
+    PosTA: Dict[str, str] = {}
+    PosTC: Dict[str, str] = {}
+    PosTG: Dict[str, str] = {}
+    PosTT: Dict[str, str] = {}
+
+    with open(structure_file, "r", encoding="utf-8") as fh:
+        lines = fh.readlines()[1:]
+
+    for line in lines:
+        seq = line.strip().split(",")
+        ids              = seq[0]
+        complete_seq     = seq[4]
+        target_seq       = complete_seq[4:24].upper()
+        extended_seq     = complete_seq.upper()
+
+        nt[ids] = [str(int(nuc[y] == extended_seq[x]))
+                   for y in range(4) for x in range(len(extended_seq))]
+        dt[ids] = [str(int(dinuct[w] == extended_seq[z:z+2]))
+                   for w in range(16) for z in range(len(extended_seq)-1)]
+
+        nts = {n: extended_seq.count(n) / len(target_seq) for n in nuc}
+        ent[ids] = str(round(sum(
+            -(p * np.log2(p)) for p in nts.values() if p != 0
+        ), 1))
+        ene[ids] = str(round(RNA.fold(target_seq)[-1], 0))
+
+        PosA[ids]  = str(extended_seq.count("A"))
+        PosT[ids]  = str(extended_seq.count("T"))
+        PosG[ids]  = str(extended_seq.count("G"))
+        PosC[ids]  = str(extended_seq.count("C"))
+        Tm_map[ids] = str(mt.Tm_NN(target_seq))
+
+        for dinuc, dmap in [
+            ("AA", PosAA), ("AT", PosAT), ("AG", PosAG), ("AC", PosAC),
+            ("CA", PosCA), ("CC", PosCC), ("CG", PosCG), ("CT", PosCT),
+            ("GA", PosGA), ("GC", PosGC), ("GG", PosGG), ("GT", PosGT),
+            ("TA", PosTA), ("TC", PosTC), ("TG", PosTG), ("TT", PosTT),
+        ]:
+            dmap[ids] = str(extended_seq.count(dinuc))
+
+        gc_count = target_seq.count("G") + target_seq.count("C")
+        gc[ids]      = str(round(gc_count / len(target_seq) * 100, 0))
+        gc_low[ids]  = str(int(gc_count < 10))
+        gc_high[ids] = str(int(gc_count >= 10))
+
+    for d in [nt, dt]:
+        for k in d:
+            d[k] = ",".join(d[k])
+
+    dict_list = [
+        nt, dt, ent, ene, gc, gc_high, gc_low, Tm_map,
+        PosA, PosT, PosG, PosC,
+        PosAA, PosAT, PosAG, PosAC,
+        PosCA, PosCC, PosCG, PosCT,
+        PosGA, PosGC, PosGG, PosGT,
+        PosTA, PosTC, PosTG, PosTT,
+    ]
+    for d in dict_list:
+        for k, v in d.items():
+            merged[k].append(v)
+    for k, v in merged.items():
+        sigma[k] = ",".join(v)
+
+    with open(output_path, "w", encoding="utf-8") as out:
+        out.write("ID," + ",".join(header) + "," + extra_cols + "\n")
+        for k, v in sorted(sigma.items()):
+            out.write(f"{k},{v}\n")
+
+    logger.info("Wrote target features → %s", output_path)
+
+
+def parse_rnafold_output(
+    input_path: str = PipelineFiles.STRUCTURE_CONN_OUTS,
+    output_path: str = PipelineFiles.STRUCTURE_OUT,
+) -> None:
+    """
+    Step 5: Parse b2ct-formatted RNAfold output into a tabular connection matrix.
+
+    Args:
+        input_path: b2ct output file (Structure_Connection.outs).
+        output_path: Output connection matrix (Structure_out.txt).
+    """
+    header = ["ID"] + [f"Pos{i}" for i in range(1, 113)]
+    sara: Dict[str, list] = {}
+    current_key: str = ""
+
+    with open(input_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            info = list(filter(None, line.strip().split()))
+            if len(info) == 5:
+                current_key = info[4]
+                sara[current_key] = []
+            elif current_key:
+                sara[current_key].append(info[4])
+
+    tmp_path = PipelineFiles.STRUCTURE_CAS9_TMP
+    df = pd.DataFrame.from_dict(sara, orient="index")
+    df.to_csv(tmp_path, sep="\t", header=False)
+    df = pd.read_csv(tmp_path, sep="\t", names=header)
+    df.to_csv(output_path, sep="\t", index=False)
+    os.remove(tmp_path)
+    logger.info("Wrote connection matrix → %s", output_path)
+
+
+def extract_spacer_scaffold_pairs(
+    input_path: str = PipelineFiles.STRUCTURE_BASEPAIRS,
+    output_path: str = PipelineFiles.SPACER_SCAFFOLD_BP,
+) -> None:
+    """
+    Step 7: Extract spacer–scaffold base-pair columns from the full matrix.
+
+    Args:
+        input_path: Full connection matrix CSV.
+        output_path: Output spacer–scaffold base-pair CSV.
+    """
+    conn_d = pd.read_csv(input_path)
+    columns = [f"Connection_Pos{i}_Pos{j}"
+               for i in range(1, 21) for j in range(21, 113)] + ["ID"]
+    pd.DataFrame(conn_d, columns=columns).to_csv(output_path, index=False)
+    logger.info("Wrote spacer–scaffold pairs → %s", output_path)
+
+
+def compute_connection_frequency(
+    input_path: str = PipelineFiles.SPACER_SCAFFOLD_BP,
+    output_path: str = PipelineFiles.SPACER_SCAFFOLD_FEATURE,
+) -> None:
+    """
+    Step 8: Build per-position connection frequency metadata.
+
+    Args:
+        input_path: Spacer–scaffold base-pair CSV.
+        output_path: Output position-frequency CSV.
+    """
+    connection = pd.read_csv(input_path)
+    cons = connection.set_index("ID").T.reset_index()
+    cons_info = cons[[cons.columns[0]]].copy()
+    cons_info.columns = ["nucleotide"]
+    split = pd.DataFrame(
+        [x.split("_") for x in cons_info["nucleotide"].tolist()]
+    )
+    cons_info["Pos_A"] = split.iloc[:, 1].str.extract(r"(\d+)", expand=False)
+    cons_info["Pos_B"] = split.iloc[:, 2].str.extract(r"(\d+)", expand=False)
+    cons_info.to_csv(output_path, index=False)
+    logger.info("Wrote connection frequency → %s", output_path)
+
+
+def annotate_structure_regions(
+    input_path: str = PipelineFiles.SPACER_SCAFFOLD_FEATURE,
+    output_path: str = PipelineFiles.STRUCTURAL_ANNOTATION,
+) -> None:
+    """
+    Step 9: Annotate each position with its structural region (R, TL, AR, LR, SL1, SL2, SL3, NS).
+
+    Args:
+        input_path: Connection frequency CSV.
+        output_path: Annotated output CSV.
+    """
+    df = pd.read_csv(input_path)
+    df["Pos_B"] = pd.to_numeric(df["Pos_B"])
+
+    region_ranges = [
+        ("TL",  33,  36),
+        ("SL1", 54,  58),
+        ("SL2", 73,  76),
+        ("SL3", 88,  90),
+        ("R",   21,  32),
+        ("AR",  37,  49),
+        ("LR",  63,  67),
+    ]
+    for label, lo, hi in region_ranges:
+        df.loc[df["Pos_B"].between(lo, hi), "Structure"] = label
+    df["Structure"].fillna("NS", inplace=True)
+    df.to_csv(output_path, index=False)
+    logger.info("Wrote structural annotation → %s", output_path)
+
+
+def _build_structure_df(
+    region_df: pd.DataFrame,
+    connection_bp: pd.DataFrame,
+    prefix: str,
+) -> pd.DataFrame:
+    """
+    Build a binary connectivity DataFrame for one structural region.
+
+    For each unique spacer position in `region_df`, determine which guide IDs
+    have at least one base-pair to the scaffold in that region.
+
+    Args:
+        region_df:     Subset of annotation DataFrame for one structural region.
+        connection_bp: Full spacer–scaffold base-pair matrix.
+        prefix:        Column-name prefix (e.g. "AR", "TL").
+
+    Returns:
+        DataFrame with one column per spacer position plus a ``Total_{prefix}`` column.
+    """
+    positions = sorted(set(region_df["Pos_A"].tolist()), reverse=True)
+    nested: Dict[str, Dict[str, int]] = {}
+
+    for pos in positions:
+        col_name  = f"{prefix}{pos}"
+        nuc_list  = list(set(
+            region_df[region_df["Pos_A"] == pos]["nucleotide"].tolist()
+        ))
+        conn_info = connection_bp[nuc_list].copy()
+        conn_info.insert(0, "ID", connection_bp[["ID"]])
+        id_dict   = conn_info.set_index("ID").T.to_dict("list")
+        nested[col_name] = {k: int(sum(v) > 0) for k, v in id_dict.items()}
+
+    result_df = pd.DataFrame(nested)
+    result_df[f"Total_{prefix}"] = result_df.sum(axis=1)
+    result_df.index.name = "ID"
+    result_df.reset_index(inplace=True)
+    return result_df
+
+
+def build_features(
+    bp_input: str = PipelineFiles.SPACER_SCAFFOLD_BP,
+    seq_input: str = PipelineFiles.TARGET_FEATURES,
+    annot_input: str = PipelineFiles.STRUCTURAL_ANNOTATION,
+    output_path: str = PipelineFiles.FEATURE_DATA,
+) -> None:
+    """
+    Step 10: Build per-region structural connectivity features and merge with sequence features.
+
+    Args:
+        bp_input:    Spacer–scaffold base-pair CSV.
+        seq_input:   Target sequence features CSV.
+        annot_input: Structural annotation CSV.
+        output_path: Output combined feature CSV.
+    """
+    conn_bp  = pd.read_csv(bp_input)
+    seq_df   = pd.read_csv(seq_input)
+    annot_df = pd.read_csv(annot_input)
+
+    regions = ["AR", "NS", "R", "SL1", "LR", "SL2", "SL3", "TL"]
+    region_dfs: Dict[str, pd.DataFrame] = {}
+
+    for region in regions:
+        sub = annot_df[annot_df["Structure"] == region][
+            ["nucleotide", "Pos_A", "Pos_B", "Structure"]
+        ]
+        region_dfs[region] = _build_structure_df(sub, conn_bp, region)
+
+    conn_totals = pd.concat(
+        [region_dfs[r][f"Total_{r}"] for r in regions], axis=1, join="outer"
+    )
+    total = conn_totals.sum(axis=1).rename("Total_Connection")
+
+    ar = region_dfs["AR"]
+    drop_cols = ["ID"]
+    merged_conn = pd.concat(
+        [ar] + [region_dfs[r].drop(columns=drop_cols) for r in regions if r != "AR"] + [total],
+        axis=1, join="outer"
+    )
+    seq_df.merge(merged_conn, on="ID", how="inner").to_csv(output_path, index=False)
+    logger.info("Wrote combined features → %s", output_path)
+
+
+def _read_dot_bracket_file(file_path: str) -> Dict[str, list]:
+    """
+    Parse an RNAfold dot-bracket format file into a dict.
+
+    Returns:
+        {sequence_id: [sequence, structure_without_energy, energy_string]}
+    """
+    result: Dict[str, list] = {}
+    with open(file_path, "r", encoding="utf-8") as fh:
+        lines = fh.readlines()
+
+    for i, line in enumerate(lines):
+        if i % 3 == 0:
+            seq_id = line[1:].strip()
+            result[seq_id] = []
+        elif i % 3 == 1:
+            result[seq_id].append(line.rstrip("\n"))
+        elif i % 3 == 2:
+            result[seq_id].append(line[:line.rfind("(")])
+            result[seq_id].append(line[line.rfind("("):line.find("\n")])
+    return result
+
+
+def _count_monomer(sequence: str, partner_index: list) -> Dict[str, int]:
+    monomer = {"A": 0, "C": 0, "G": 0, "U": 0}
     for i in range(20):
         if partner_index[i] != 0:
             monomer[sequence[i]] += 1
@@ -663,572 +522,281 @@ def count_monomer(sequence, partner_index):
     return monomer
 
 
-# count di-nucleotide
-def count_dimer(dimers):
-    """
-    Input: sequence, partner_base
-    Return the number of di-nucleotide
-    """
-    dinucleotide = {}
-    dinucleotide = {'AA': 0, 'AC': 0, 'AG': 0, 'AU': 0,
-                    'CA': 0, 'CC': 0, 'CG': 0, 'CU': 0,
-                    'GA': 0, 'GC': 0, 'GG': 0, 'GU': 0,
-                    'UA': 0, 'UC': 0, 'UG': 0, 'UU': 0}
-
-    for i in range(len(dimers)):
-        dinucleotide[dimers[i]] += 1
+def _count_dimer(dimers: list) -> Dict[str, int]:
+    dinucleotide = {
+        "AA": 0, "AC": 0, "AG": 0, "AU": 0,
+        "CA": 0, "CC": 0, "CG": 0, "CU": 0,
+        "GA": 0, "GC": 0, "GG": 0, "GU": 0,
+        "UA": 0, "UC": 0, "UG": 0, "UU": 0,
+    }
+    for d in dimers:
+        dinucleotide[d] += 1
     return dinucleotide
 
 
-# count GC content
-def count_GC_content(sequence, partner_index):
-    """
-    Count GC content of a sequence
-    """
+def _count_gc_content(sequence: str, partner_index: list) -> int:
     count = 0
     for i in range(20):
         if partner_index[i] != 0:
-            if (sequence[i] == 'G' and sequence[partner_index[i]] == 'C'):
-                count += 1
-            elif (sequence[i] == 'C' and sequence[partner_index[i]] == 'G'):
+            pair = {sequence[i], sequence[partner_index[i]]}
+            if pair == {"G", "C"}:
                 count += 1
     return count
 
 
-def calculate_free_energy(dimers):
-    """
-    Calculate free energy of a dimer, return the free energy
-    First, convert the sequence and partner_base to dimers arrays
-    Second, calculate the free energy of each dimer based on stacking model
-    """
-    free_energy = 0
-
-    stacking_model_array = stacking_model.return_stacking_model()
+def _calculate_free_energy(dimers: list) -> float:
+    stacking = return_stacking_model()
+    energy = 0.0
     for i in range(0, len(dimers), 2):
-        free_energy += stacking_model_array[dimers[i]][dimers[i+1][::-1]]
-    return free_energy
+        energy += stacking[dimers[i]][dimers[i + 1][::-1]]
+    return energy
 
 
-def finalfeatures():
-    ID_sequence_structure_energy = read_dot_bracket_format_file(
-        "Structure_Connection.out")
-    feature_data = pd.read_csv("Feature_Data_Spacer_Scaffold.csv")
+def compute_final_features(
+    rnafold_out: str = PipelineFiles.STRUCTURE_CONN_OUT,
+    feature_input: str = PipelineFiles.FEATURE_DATA,
+    output_path: str = PipelineFiles.DEEP_LEARNING_FILE,
+) -> None:
+    """
+    Step 11: Compute spacer–scaffold structural features from dot-bracket and merge.
 
-    IDS = {}
-    IDX = {}
-    monomer = []
-    dimer = []
-    for ID in ID_sequence_structure_energy:
-        sequence = ID_sequence_structure_energy[ID][0]
-        structure = ID_sequence_structure_energy[ID][1]
-        energy = ID_sequence_structure_energy[ID][2]
+    Args:
+        rnafold_out:   RNAfold dot-bracket output file.
+        feature_input: Combined feature CSV.
+        output_path:   Output deep-learning input CSV.
+    """
+    id_data    = _read_dot_bracket_file(rnafold_out)
+    feat_df    = pd.read_csv(feature_input)
 
-        partner_index = make_arrays.return_partner_index(structure)  # num
-        partner_index = make_arrays.adjust_partner_index(partner_index)
-        partner_base = make_arrays.return_partner_base(
-            partner_index, sequence)  # seq
-        connection_length, count = make_arrays.return_connection_length(
-            partner_index)
+    ids_gc: Dict[str, list] = {}
+    ids_mono_di: Dict[str, list] = {}
 
-        # make dimers array
-        dimers = make_arrays.return_dimers_array(sequence, partner_index)
+    for seq_id, vals in id_data.items():
+        sequence, structure = vals[0], vals[1]
+        p_idx    = adjust_partner_index(return_partner_index(structure))
+        p_base   = return_partner_base(p_idx, sequence)
+        _, count = return_connection_length(p_idx)
+        dimers   = return_dimers_array(sequence, p_idx)
 
-        # mask array
-        SP_sequence_masked = make_arrays.return_masked_array(
-            sequence, partner_index, 20)  # num
-        SP_partner_base_masked = make_arrays.return_masked_array(
-            partner_base, partner_index, 20)  # num
+        gc  = _count_gc_content(sequence, p_idx) / count if count else 0.0
+        eng = _calculate_free_energy(dimers)
+        ids_gc[seq_id]      = [gc, eng]
+        ids_mono_di[seq_id] = [_count_monomer(sequence, p_idx), _count_dimer(dimers)]
 
-        # count GC content
-        if count != 0:
-            GC_count = count_GC_content(sequence, partner_index)/count
-        else:
-            GC_count = 0
-        # count mono-nucleotide
-        monomer_count = count_monomer(sequence, partner_index)
-        for key, values in monomer_count.items():
-            monomer.append(values)
+    mono_di = {
+        k: {key: val for d in v for key, val in d.items()}
+        for k, v in ids_mono_di.items()
+    }
+    df1 = pd.DataFrame(mono_di).T
+    df1.index.name = "ID"
+    df1.reset_index(inplace=True)
 
-        # count dimers
-        dimers_count = count_dimer(dimers)
-        for key, values in dimers_count.items():
-            dimer.append(values)
+    df2 = pd.DataFrame.from_dict(ids_gc).T
+    df2.columns = ["GC_ratio", "Gibbs_Energy"]
+    df2.index.name = "ID"
+    df2.reset_index(inplace=True)
 
-        # stacking energy
-        stacking_energy = calculate_free_energy(dimers)
-        IDS[ID] = [GC_count, stacking_energy]
-        IDX[ID] = [monomer_count, dimers_count]
-
-        monomer_dimer = {k: {k: v for IDX in L for k, v in IDX.items()}
-                         for k, L in IDX.items()}
-
-    df_1 = pd.DataFrame(monomer_dimer).T
-    df_1.index.name = 'ID'
-    df_1.reset_index(inplace=True)
-
-    df_2 = pd.DataFrame.from_dict(IDS).T
-    df_2.columns = ["GC_ratio", "Gibbs_Energy"]
-    df_2.index.name = 'ID'
-    df_2.reset_index(inplace=True)
-
-    mydf = pd.merge(df_1, df_2, on="ID", how='inner')
-    mydf.columns = ['ID', 'Spacer_Scaffold_A', 'Spacer_Scaffold_C', 'Spacer_Scaffold_G', 'Spacer_Scaffold_U', 'Spacer_Scaffold_AA', 'Spacer_Scaffold_AC', 'Spacer_Scaffold_AG', 'Spacer_Scaffold_AU', 'Spacer_Scaffold_CA', 'Spacer_Scaffold_CC', 'Spacer_Scaffold_CG',
-                    'Spacer_Scaffold_CU', 'Spacer_Scaffold_GA', 'Spacer_Scaffold_GC', 'Spacer_Scaffold_GG', 'Spacer_Scaffold_GU', 'Spacer_Scaffold_UA', 'Spacer_Scaffold_UC', 'Spacer_Scaffold_UG', 'Spacer_Scaffold_UU', 'Spacer_Scaffold_GC_ratio', 'Spacer_Scaffold_Gibbs_Energy']
-#    feature_data['INDEL'] = feature_data['INDEL'].astype(float)
-
-    final_feature = feature_data.merge(mydf, on=['ID'])
-    final_feature.to_csv("Deep_learning_file.csv", index=False)
+    combined = pd.merge(df1, df2, on="ID", how="inner")
+    combined.columns = [
+        "ID",
+        "Spacer_Scaffold_A", "Spacer_Scaffold_C", "Spacer_Scaffold_G", "Spacer_Scaffold_U",
+        "Spacer_Scaffold_AA", "Spacer_Scaffold_AC", "Spacer_Scaffold_AG", "Spacer_Scaffold_AU",
+        "Spacer_Scaffold_CA", "Spacer_Scaffold_CC", "Spacer_Scaffold_CG", "Spacer_Scaffold_CU",
+        "Spacer_Scaffold_GA", "Spacer_Scaffold_GC", "Spacer_Scaffold_GG", "Spacer_Scaffold_GU",
+        "Spacer_Scaffold_UA", "Spacer_Scaffold_UC", "Spacer_Scaffold_UG", "Spacer_Scaffold_UU",
+        "Spacer_Scaffold_GC_ratio", "Spacer_Scaffold_Gibbs_Energy",
+    ]
+    feat_df.merge(combined, on="ID").to_csv(output_path, index=False)
+    logger.info("Wrote final features → %s", output_path)
 
 
-def fastamaker():
-    file1 = open("Structure_file.csv", 'r')
-    out = open('Structure_Connection.fa', 'w')
-    gout = open('Structure_Connection.csv', 'w')
-    gout.write('ID' + ',' + 'Sequence' + '\n')
-    file1 = file1.readlines()
-    seq = 'GTTTCAGAGCTATGCTGGAAACAGCATAGCAAGTTGAAATAAGGCTAGTCCGTTATCAACTTGAAAAAGTGGCACCGAGTCGGTGCTTTTTT'
-    del file1[0]
-    for line in file1:
-        info = line.strip().split(',')
-        ids = info[0]
-        sequence = info[4][4:24] + seq
-        out.write('>' + str(ids) + '\n' + str(sequence) + '\n')
-        gout.write(str(ids) + ',' + str(sequence) + '\n')
-    out.close()
-    gout.close()
+def _get_input(input_path: str) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """
+    Parse Deep_learning_file.csv into model input arrays.
+
+    Returns:
+        Tuple of (one-hot sequence array, additional feature array, guide IDs)
+    """
+    import itertools
+
+    with open(input_path, "r", encoding="utf-8") as fh:
+        lines = fh.readlines()
+
+    colnames    = [x.strip('"') for x in lines[0].strip().split(",")]
+    data_lines  = lines[1:]
+    idss: List[str] = [l.strip().split(",")[0] for l in data_lines]
+
+    idx_a = [colnames.index(f"A{x}") for x in range(1, 31)]
+    idx_t = [colnames.index(f"T{x}") for x in range(1, 31)]
+    idx_g = [colnames.index(f"G{x}") for x in range(1, 31)]
+    idx_c = [colnames.index(f"C{x}") for x in range(1, 31)]
+
+    idx_di: List[int] = []
+    if "AA1" in colnames:
+        for pair in ["AA","AT","AG","AC","TA","TT","TG","TC","GA","GT","GG","GC","CA","CT","CG","CC"]:
+            idx_di += [colnames.index(f"{pair}{x}") for x in range(1, 30)]
+
+    idx_id     = [colnames.index("ID")]
+    idx_others = [i for i in range(len(colnames))
+                  if i not in idx_a + idx_t + idx_g + idx_c + idx_id + idx_di]
+
+    in_: List[list] = []
+    add_: List[list] = []
+
+    for line in data_lines:
+        row = line.strip().split(",")
+        _a = [int(row[i]) for i in idx_a]
+        _t = [int(row[i]) for i in idx_t]
+        _g = [int(row[i]) for i in idx_g]
+        _c = [int(row[i]) for i in idx_c]
+        _oth = [float(row[i]) for i in idx_others]
+
+        seq = "".join(
+            "A" if _a[i] else "T" if _t[i] else "C" if _c[i] else "G" if _g[i] else "?"
+            for i in range(len(_a))
+        )
+        onehot = [[_a[i], _c[i], _g[i], _t[i]] for i in range(len(_a))]
+        dinuc = [
+            int("".join(nuc) == seq[j:j+2])
+            for nuc in itertools.product("ATCG", repeat=2)
+            for j in range(len(seq)-1)
+        ]
+        _oth += dinuc
+        in_.append(onehot)
+        add_.append(_oth)
+
+    in_arr  = np.asarray(in_).reshape(-1, 30, 4, 1)
+    add_arr = np.asarray(add_)
+    return in_arr, add_arr, idss
 
 
-def test_model(modelD, X, a):
-    resultList = []
-    for modelF in filter(lambda x: x.endswith('h5'), os.listdir(modelD)):
-        model = models.load_model(modelD + '/' + modelF)
-
-        test_result = model.predict([X, a])
-
-        resultList.append(test_result)
-
-    # resultList = np.asarray(resultList)
-    result = np.mean(resultList, axis=0)
-
-    return (result)
+def _test_model(model_dir: str, x: np.ndarray, a: np.ndarray) -> np.ndarray:
+    """Load all .h5 models from a directory and return their ensemble mean prediction."""
+    results = []
+    for fname in filter(lambda f: f.endswith(".h5"), os.listdir(model_dir)):
+        model = tf_models.load_model(os.path.join(model_dir, fname))
+        results.append(model.predict([x, a]))
+    return np.mean(results, axis=0)
 
 
-def get_Input(inputF):
-    trans = str.maketrans('ACGT', '0123')
-    # writer = open(inputF.split('.csv')[0] + '_Sequence.txt','w')
-    in_ = []
-    add_ = []
-    idss = []
-    totalN = 0
-    f = open(inputF)
-    q = open(inputF)
-    klines = q.readlines()
-    lines = f.readlines()
-    del klines[0]
-    f.close()
-    for line in klines:
-        info_id = line.strip().split(',')[0]
-        idss.append(info_id)
+def score_guides(
+    models_base_dir: str,
+    input_path: str = PipelineFiles.DEEP_LEARNING_FILE,
+    struct_input: str = PipelineFiles.STRUCTURE_FILE,
+    output_path: str = "DGDVar.csv",
+) -> None:
+    """
+    Step 12: Score guide candidates using 9 SpCas9 variant CNN ensembles.
 
-    colnames = [x.strip('"') for x in lines[0].strip().split(',')]
-    Index_As = [colnames.index('A'+str(x)) for x in range(1, 31)]
-    Index_Ts = [colnames.index('T'+str(x)) for x in range(1, 31)]
-    Index_Gs = [colnames.index('G'+str(x)) for x in range(1, 31)]
-    Index_Cs = [colnames.index('C'+str(x)) for x in range(1, 31)]
+    Args:
+        models_base_dir: Base directory containing variant model subdirs.
+        input_path:      Deep learning input CSV.
+        struct_input:    Guide structure CSV.
+        output_path:     Output scores CSV.
+    """
+    struct_df = pd.read_csv(struct_input)
+    x, a, pop_id = _get_input(input_path)
 
-    if 'AA1' in colnames:
-        Index_AAs = [colnames.index('AA'+str(x)) for x in range(1, 30)]
-        Index_ATs = [colnames.index('AT'+str(x)) for x in range(1, 30)]
-        Index_AGs = [colnames.index('AG'+str(x)) for x in range(1, 30)]
-        Index_ACs = [colnames.index('AC'+str(x)) for x in range(1, 30)]
-        Index_TAs = [colnames.index('TA'+str(x)) for x in range(1, 30)]
-        Index_TTs = [colnames.index('TT'+str(x)) for x in range(1, 30)]
-        Index_TGs = [colnames.index('TG'+str(x)) for x in range(1, 30)]
-        Index_TCs = [colnames.index('TC'+str(x)) for x in range(1, 30)]
-        Index_GAs = [colnames.index('GA'+str(x)) for x in range(1, 30)]
-        Index_GTs = [colnames.index('GT'+str(x)) for x in range(1, 30)]
-        Index_GGs = [colnames.index('GG'+str(x)) for x in range(1, 30)]
-        Index_GCs = [colnames.index('GC'+str(x)) for x in range(1, 30)]
-        Index_CAs = [colnames.index('CA'+str(x)) for x in range(1, 30)]
-        Index_CTs = [colnames.index('CT'+str(x)) for x in range(1, 30)]
-        Index_CGs = [colnames.index('CG'+str(x)) for x in range(1, 30)]
-        Index_CCs = [colnames.index('CC'+str(x)) for x in range(1, 30)]
-    else:
-        Index_AAs = []
-        Index_ATs = []
-        Index_AGs = []
-        Index_ACs = []
-        Index_TAs = []
-        Index_TTs = []
-        Index_TGs = []
-        Index_TCs = []
-        Index_GAs = []
-        Index_GTs = []
-        Index_GGs = []
-        Index_GCs = []
-        Index_CAs = []
-        Index_CTs = []
-        Index_CGs = []
-        Index_CCs = []
+    variant_dirs = {
+        "DGDSpCas9":    os.path.join(models_base_dir, "SpCas9",    "models"),
+        "DGDeSpCas9":   os.path.join(models_base_dir, "eSpCas9",   "models"),
+        "DGDHypaCas9":  os.path.join(models_base_dir, "HypaCas9",  "models"),
+        "DGDSpCas9Hf1": os.path.join(models_base_dir, "SpCas9-Hf1","models"),
+        "DGDSniperCas9":os.path.join(models_base_dir, "Sniper-Cas9","models"),
+        "DGDevoCas9":   os.path.join(models_base_dir, "evoCas9",   "models"),
+        "DGDxCas9":     os.path.join(models_base_dir, "xCas9",     "models"),
+        "DGDSpCas9VRQR":os.path.join(models_base_dir, "SpCas9-VRQR","models"),
+        "DGDSpCas9NG":  os.path.join(models_base_dir, "SpCas9-NG", "models"),
+    }
 
-    Index_ID = [colnames.index('ID')]
-    Index_others = [x for x in range(len(colnames)) if not x in Index_As + Index_Ts + Index_Gs + Index_Cs + Index_ID + Index_AAs+Index_ATs +
-                    Index_AGs+Index_ACs+Index_TAs+Index_TTs+Index_TGs+Index_TCs+Index_GAs+Index_GTs+Index_GGs+Index_GCs+Index_CAs+Index_CTs+Index_CGs+Index_CCs]
-    
-    for line in lines[1:]:
-        line = line.strip().split(',')
-        _A = [int(line[x]) for x in Index_As]
-        _T = [int(line[x]) for x in Index_Ts]
-        _G = [int(line[x]) for x in Index_Gs]
-        _C = [int(line[x]) for x in Index_Cs]
-        _others = [float(line[x]) for x in Index_others]
-        seq = ''
-        for i in range(len(_A)):
-            if _A[i] == 1:
-                seq += 'A'
-            elif _T[i] == 1:
-                seq += 'T'
-            elif _C[i] == 1:
-                seq += 'C'
-            elif _G[i] == 1:
-                seq += 'G'
-            else:
-                print("Not in ATGC !")
-        var_onehot = []
-        for i in range(len(_A)):
-            var_onehot.append([_A[i], _C[i], _G[i], _T[i]])
-        kmerList = [seq[i:i+2] for i in range(len(seq)-1)]
+    score_frames: List[pd.DataFrame] = [pd.DataFrame(pop_id, columns=["ID"])]
+    for col_name, model_dir in variant_dirs.items():
+        result = _test_model(model_dir, x, a)
+        score_frames.append(
+            pd.DataFrame(result.reshape(len(result), 1), columns=[col_name])
+        )
 
-        dinucList = []
-        for nuc in itertools.product('ATCG', repeat=2):
-            dinuc = ''.join(nuc)
-            for kmer in kmerList:
-                if kmer == dinuc:
-                    dinucList.append(1)
-                else:
-                    dinucList.append(0)
-        _others += dinucList
+    score_df = pd.concat(score_frames, axis=1, join="outer")
+    merged   = struct_df.merge(score_df, on="ID", how="inner")
+    merged.to_csv(output_path, index=False)
 
-        in_.append(var_onehot)
-        add_.append(_others)
-    in_ = np.asarray(in_)
-    in_ = in_.reshape(-1, 30, 4, 1)
-    add_ = np.asarray(add_)
-    ids = np.asarray(Index_ID)
-
-    return in_, add_, idss
+    # Re-read and apply no_activity threshold
+    dgd = pd.read_csv(output_path)
+    for col in variant_dirs:
+        dgd.loc[dgd[col] < 0.0, col] = "no_activity"
+    dgd.to_csv(output_path, index=False)
+    logger.info("Wrote variant scores → %s", output_path)
 
 
-def score_deep():
-    struct_file = pd.read_csv("Structure_file.csv")
-    in_, add_, pop_id = get_Input(
-        "Deep_learning_file.csv")
+def run_pipeline(
+    fasta_path: str,
+    output_path: str = "DGDVar.csv",
+    models_dir: str = ".",
+) -> None:
+    """
+    Run the complete 12-step DGDVar pipeline.
 
-    SpCas9 = test_model('./SpCas9/models/', in_, add_)
-    eSpCas9 = test_model('./eSpCas9/models/', in_, add_)
-    HypaCas9 = test_model('./HypaCas9/models/', in_, add_)
-    SniperCas9 = test_model('./Sniper-Cas9/models/', in_, add_)
-    xCas9 = test_model('./xCas9/models/', in_, add_)
-    SpCas9NG = test_model('./SpCas9-NG/models/', in_, add_)
-    SpCas9Hf1 = test_model('./SpCas9-Hf1/models/', in_, add_)
-    SpCas9VRQR = test_model('./SpCas9-VRQR/models/', in_, add_)
-    evoCas9 = test_model('./evoCas9/models/', in_, add_)
-    
-    SpCas9_score = pd.DataFrame(SpCas9.reshape(len(SpCas9), 1))
-    SpCas9NG_score = pd.DataFrame(SpCas9NG.reshape(len(SpCas9NG), 1))
-    SniperCas9_score = pd.DataFrame(SniperCas9.reshape(len(SniperCas9), 1))
-    HypaCas9_score = pd.DataFrame(SniperCas9.reshape(len(HypaCas9), 1))
-    eSpCas9_score = pd.DataFrame(SniperCas9.reshape(len(eSpCas9), 1))
-    evoCas9_score = pd.DataFrame(SniperCas9.reshape(len(evoCas9), 1))
-    xCas9_score = pd.DataFrame(SniperCas9.reshape(len(xCas9), 1))
-    SpCas9Hf1_score = pd.DataFrame(SpCas9Hf1.reshape(len(SpCas9Hf1), 1))
-    SpCas9VRQR_score = pd.DataFrame(SpCas9VRQR.reshape(len(SpCas9VRQR), 1))
-    SpCas9_score.columns = ['DGDSpCas9']
-    SpCas9NG_score.columns = ['DGDSpCas9NG']
-    SniperCas9_score.columns = ['DGDSniperCas9']
-    HypaCas9_score.columns = ['DGDHypaCas9']
-    eSpCas9_score.columns = ['DGDeSpCas9']
-    evoCas9_score.columns = ['DGDevoCas9']
-    xCas9_score.columns = ['DGDxCas9']
-    SpCas9VRQR_score.columns = ['DGDSpCas9VRQR']
-    SpCas9Hf1_score.columns = ['DGDSpCas9Hf1']
+    Args:
+        fasta_path:  Input FASTA file.
+        output_path: Output CSV path for variant scores.
+        models_dir:  Directory containing variant model subdirectories.
+    """
+    steps = [
+        ("Step  1 — Scanning guides",          lambda: scan_guides(fasta_path)),
+        ("Step  2 — Building scaffold FASTA",   make_fasta_for_rnafold),
+        ("Step  3 — Computing target features", compute_target_features),
+        ("Step  4 — RNAfold",                   lambda: _run_command(
+            "RNAfold -j0 --noPS <Structure_Connection.fa >Structure_Connection.out",
+            shell=True, description="RNAfold"
+        )),
+        ("Step  5 — Parsing RNAfold output",    parse_rnafold_output),
+        ("Step  6 — connection_to_matrix",      lambda: _run_command(
+            "./connection_to_matrix Structure_out.txt 112 > Structure_basepairs.csv",
+            shell=True, description="connection_to_matrix"
+        )),
+        ("Step  7 — Extracting spacer–scaffold pairs",    extract_spacer_scaffold_pairs),
+        ("Step  8 — Computing connection frequency",      compute_connection_frequency),
+        ("Step  9 — Annotating structural regions",       annotate_structure_regions),
+        ("Step 10 — Building features",                   build_features),
+        ("Step 11 — Computing final features",            compute_final_features),
+        ("Step 12 — Scoring with variant ensembles",      lambda: score_guides(
+            models_dir, output_path=output_path
+        )),
+    ]
 
-    SpCas9_score.columns = ['DGDSpCas9']
-    ID = pd.DataFrame(pop_id, columns=['ID'])
-    Score_complete = pd.concat([ID, SpCas9_score,eSpCas9_score, HypaCas9_score, SpCas9Hf1_score,SniperCas9_score,evoCas9_score, xCas9_score, SpCas9VRQR_score, SpCas9NG_score], axis=1, join='outer')
+    for label, step_fn in steps:
+        logger.info(label)
+        step_fn()
 
-    Merge_str = pd.merge(struct_file, Score_complete, on='ID', how='inner')
-    Merge_str.to_csv("DGD.csv", index=False)
-    dgd = pd.read_csv("DGD.csv")
-    dgd.loc[dgd.DGDSpCas9 < 0.0, 'DGDSpCas9'] = "no_activity"
-    dgd.loc[dgd.DGDevoCas9 < 0.0, 'DGDevoCas9'] = "no_activity"
-    dgd.loc[dgd.DGDeSpCas9 < 0.0, 'DGDeSpCas9'] = "no_activity"
-    dgd.loc[dgd.DGDHypaCas9 < 0.0, 'DGDHypaCas9'] = "no_activity"
-    dgd.loc[dgd.DGDSniperCas9 < 0.0, 'DGDSniperCas9'] = "no_activity"
-    dgd.loc[dgd.DGDSpCas9NG < 0.0, 'DGDSpCas9NG'] = "no_activity"
-    dgd.loc[dgd.DGDSpCas9VRQR < 0.0, 'DGDSpCas9VRQR'] = "no_activity"
-    dgd.loc[dgd.DGDSpCas9Hf1 < 0.0, 'DGDSpCas9Hf1'] = "no_activity"
-    dgd.loc[dgd.DGDxCas9 < 0.0, 'DGDxCas9'] = "no_activity"
-    dgd.to_csv("DGDVar.csv", index=False)
+    logger.info("Pipeline complete. Results: %s", output_path)
 
 
-def dgdmain(file1):
-    cas9_gg = {}
-    ncas9_cc = {}
-    cas9_aa = {}
-    ncas9_tt = {}
-    ncas9_tg = {}
-    cas9_ca = {}
-    ncas9_cc = {}
-    cas9_gg = {}
-    ncas9_cg = {}
-    cas9_gc = {}
-    ncas9_tc = {}
-    cas9_ga = {}
-    ncas9_ta = {}
-    cas9_at = {}
-    ncas9_gt = {}
-    cas9_ac = {}
-    ncas9_ct = {}
-    cas9_ag = {}
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "DGDVar — DGD pipeline for broad-PAM Cas9 variant scoring. "
+            "Scores guides against 9 SpCas9 variant models."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("FASTA", help="Input FASTA file (sequences must be 100–10,000 nt)")
+    parser.add_argument("--output", "-o", default="DGDVar.csv", help="Output CSV file")
+    parser.add_argument("--models", "-m", default=".", help="Base directory for variant model subdirs")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    args = parser.parse_args()
 
-    sara = {}
-    ast = []
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
-    fastafile = open(file1, 'r')
-    input1 = file1[:-3]
-    out = open("Structure_file.csv", 'w')
-    fastafile = fastafile.readlines()
-    out.write('ID' + ',' + 'Start' + ',' + 'End' +
-              ',' + 'Strand' + ',' + 'Sequence' + '\n')
-    for line in fastafile:
-        if line.startswith(">"):
-            newline = line.strip('\r\n')
-            nare = newline[1:]
-            nare = nare.split(' ')[0]
-            ps = nare
-            sara[ps] = []
-        else:
-            newsequence = line.strip('\r\n').split('\n')
-            for az in newsequence:
-                ast.append(az)
-            my_str = ''.join(map(str, ast))
-            sara[ps] = [my_str]
-    for key, value in sara.items():
-        my_value = value[0]
-        if (int(100) <= len(my_value) <= int(10000)):
-            for n in range(len(my_value)):
-                st = my_value.find('AG', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_ag[idn] = [nstart, nend, '+', sequences]
-            for p in range(len(my_value)):
-                st = my_value.find('CT', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_ct[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('AC', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        cas9_ac[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('GT', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_gt[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('AA', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_aa[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('TT', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_tt[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('AT', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_at[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('TA', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_ta[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('GA', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_ga[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('TC', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_tc[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('GC', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_gc[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('CG', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_cg[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('GG', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_gg[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('CC', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_cc[idn] = [nstart, nend, '-', nsequences]
-
-            for n in range(len(my_value)):
-                st = my_value.find('CA', n)
-                if st == n:
-                    if int(25) < int(st) < len(my_value)-int(5):
-                        nstart = int(st) - int(25)
-                        nend = int(st) + int(5)
-                        sequences = my_value[nstart:nend]
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '+'
-                        cas9_ca[idn] = [nstart, nend, '+', sequences]
-
-            for p in range(len(my_value)):
-                st = my_value.find('TG', p)
-                if st == p:
-                    if int(3) < int(st) < len(my_value)-int(27):
-                        nstart = int(st) - int(3)
-                        nend = int(st) + int(27)
-                        sequences = my_value[nstart:nend]
-                        nsequences = reverseComp(sequences)
-                        idn = key + ':' + str(nstart) + \
-                            ':' + str(nend) + ':' + '-'
-                        ncas9_tg[idn] = [nstart, nend, '-', nsequences]
+    try:
+        run_pipeline(args.FASTA, output_path=args.output, models_dir=args.models)
+    except (FileNotFoundError, ValueError, RuntimeError) as err:
+        logger.error("%s", err)
+        sys.exit(1)
 
 
-
-    newcasi = dict(chain(cas9_gg.items(), ncas9_cc.items(), cas9_aa.items(), ncas9_tt.items(), cas9_ca.items(), ncas9_cc.items(), cas9_gg.items(), ncas9_cg.items(
-    ), cas9_gc.items(), ncas9_tc.items(), cas9_ga.items(), ncas9_ta.items(), cas9_at.items(), ncas9_gt.items(), cas9_ac.items(), ncas9_ct.items(), cas9_ag.items()))
-
-    syt = OrderedDict(
-        sorted(newcasi.items(), key=lambda x: x[1][3], reverse=True))
-
-    for key, value in syt.items():
-        out.write(str(
-            key) + ',' + str(value[0]) + ',' + str(value[1]) + ',' + str(value[2]) + ',' + str(value[3]) + '\n')
-    out.close()
-
-    fastamaker()
-    targetsequence()
-    os.system(
-        "RNAfold -j0 --noPS <Structure_Connection.fa> Structure_Connection.out")
-    os.system("b2ct <Structure_Connection.out> Structure_Connection.outs")
-    Connectstr()
-    os.system(
-        "./connection_to_matrix Structure_out.txt 112 > Structure_basepairs.csv")
-    spacerscaffold()
-    spacerconnectionfrequency()
-    serialconnection()
-    featuremaker()
-    finalfeatures()
-    score_deep()
-
-
-args = sys.argv[1]
-result = dgdmain(args)
-print(result)
+if __name__ == "__main__":
+    main()
