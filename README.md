@@ -390,6 +390,4 @@ python Accessory/score_deep.py --models ./models --input Deep_learning_file.csv 
 
 ## License
 
-MIT
-
 MIT License — see `LICENSE` file for details.
