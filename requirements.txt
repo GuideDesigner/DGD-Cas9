@@ -1,0 +1,15 @@
+# DGD-Cas9 dependencies
+# Python >= 3.8 required
+#
+# Recreated from the versions documented in README.md -- the original
+# requirements.txt was missing from this branch's history.
+
+numpy>=1.21
+pandas>=1.3
+biopython>=1.79
+tensorflow>=2.6
+
+# ViennaRNA Python bindings (RNA free energy calculations).
+# If the pip build fails on your system, install via conda instead:
+#   conda install -c bioconda viennarna
+ViennaRNA>=2.5.0

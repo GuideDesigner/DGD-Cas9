@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, full-pipeline]
+  pull_request:
+    branches: [main, full-pipeline]
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Fast, no-network-deps check: every .py file parses with base Python
+  # (catches typos/syntax errors immediately, no package installs needed).
+  # ---------------------------------------------------------------------
+  syntax-check:
+    name: Python syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Parse every .py file
+        run: |
+          set -e
+          status=0
+          while IFS= read -r -d '' f; do
+            python -m py_compile "$f" || status=1
+          done < <(find . -name "*.py" -not -path "./.git/*" -print0)
+          exit $status
+
+  # ---------------------------------------------------------------------
+  # Validate the Snakemake DAG for every variant/config combination,
+  # without needing RNAfold, the C++ binary, or trained models.
+  # ---------------------------------------------------------------------
+  snakemake-dry-run:
+    name: Snakemake DAG validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Snakemake
+        run: |
+          python -m pip install --upgrade pip
+          pip install snakemake "pulp<2.8"
+      - name: Dry-run every variant / config combination
+        run: |
+          set -e
+          snakemake --cores 1 -n
+          snakemake --cores 1 -n --config run_scoring=true
+          snakemake --cores 1 -n --config variant=broad_pam
+          snakemake --cores 1 -n --config variant=base_editor
+      - name: Reject an invalid variant
+        run: '! snakemake --cores 1 -n --config variant=bogus'
+
+  # ---------------------------------------------------------------------
+  # Real execution smoke test: installs the actual Python dependencies
+  # (numpy/pandas/biopython/ViennaRNA Python bindings -- NOT TensorFlow,
+  # NOT the C++ binary) and runs Steps 1-3 against the bundled demo FASTA.
+  # This is as far as this pipeline can run without the missing
+  # connection_to_matrix.cpp source and trained .h5 models (see README
+  # "Known Issues") -- those two gaps are the repository owner's to fill.
+  # ---------------------------------------------------------------------
+  smoke-test:
+    name: Steps 1-3 smoke test (demo FASTA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lightweight pipeline dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas biopython ViennaRNA
+          pip install snakemake "pulp<2.8"
+      - name: Run steps 1-3 against the demo FASTA
+        run: snakemake --cores 1 Structure_file.csv Structure_Connection.fa Target_sequence_feature.csv
+      - name: Verify outputs
+        run: |
+          for f in Structure_file.csv Structure_Connection.fa Structure_Connection.csv Target_sequence_feature.csv; do
+            test -s "$f" || { echo "Missing or empty output: $f"; exit 1; }
+          done
+      - name: Upload smoke-test outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dgd-smoke-test-outputs
+          path: |
+            *.csv
+            *.fa
+            logs/
+          retention-days: 7

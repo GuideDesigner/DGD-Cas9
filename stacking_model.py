@@ -17,6 +17,28 @@ def return_stacking_model() -> dict:
     Constructs and returns a nested dictionary mapping dinucleotide pairs
     to their stacking free energies in kcal/mol at 37°C.
 
+    ****************************************************************
+    KNOWN ISSUE -- INCOMPLETE TABLE, NEEDS ATTENTION BEFORE TRUSTING
+    RESULTS THAT DEPEND ON Spacer_Scaffold_Gibbs_Energy:
+    ****************************************************************
+    A standard nearest-neighbour RNA stacking table has 16 top-level
+    dinucleotide contexts (AA, AU, AG, AC, UA, UU, UG, UC, GA, GU, GG,
+    GC, CA, CU, CG, CC). This dict only defines 4 of them (AA, AU, AG,
+    AC). Since real guide/scaffold sequences routinely contain the other
+    12 dinucleotides, DGD.py's _calculate_stacking_energy() used to raise
+    a hard KeyError the first time it looked one up -- i.e. step 11
+    (compute_final_features) could not complete for any real input.
+
+    Rather than invent the missing thermodynamic values (they should come
+    from the original published parameter set this model was trained
+    against, not be guessed), calculate_stacking_energy() below now falls
+    back to 0.0 kcal/mol for any missing context and logs a warning. This
+    keeps the pipeline runnable end-to-end for development/testing, but
+    the resulting Spacer_Scaffold_Gibbs_Energy feature is only fully
+    correct for guides whose paired dimers happen to only use AA/AU/AG/AC
+    contexts. Please supply the complete 16-context table before relying
+    on this feature for real predictions.
+
     Returns:
         A dict where keys are dinucleotide strings (e.g., 'AA', 'GC')
         and values are dicts mapping base-pair contexts to stacking energies.

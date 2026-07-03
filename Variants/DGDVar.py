@@ -547,8 +547,15 @@ def _count_gc_content(sequence: str, partner_index: list) -> int:
 def _calculate_free_energy(dimers: list) -> float:
     stacking = return_stacking_model()
     energy = 0.0
-    for i in range(0, len(dimers), 2):
-        energy += stacking[dimers[i]][dimers[i + 1][::-1]]
+    # See KNOWN ISSUE note in stacking_model.return_stacking_model(): the
+    # table only covers 4 of 16 dinucleotide contexts, and `dimers` is not
+    # guaranteed to have an even length. Fall back to 0.0 / skip a trailing
+    # unpaired entry instead of crashing.
+    for i in range(0, len(dimers) - 1, 2):
+        context = stacking.get(dimers[i])
+        if context is None:
+            continue
+        energy += context.get(dimers[i + 1][::-1], 0.0)
     return energy
 
 
@@ -576,7 +583,7 @@ def compute_final_features(
         p_idx    = adjust_partner_index(return_partner_index(structure))
         p_base   = return_partner_base(p_idx, sequence)
         _, count = return_connection_length(p_idx)
-        dimers   = return_dimers_array(sequence, p_idx)
+        dimers, _anti_seq = return_dimers_array(sequence, p_idx)  # BUG FIX: was assigned the raw (dimers, anti_seq) tuple
 
         gc  = _count_gc_content(sequence, p_idx) / count if count else 0.0
         eng = _calculate_free_energy(dimers)

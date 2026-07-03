@@ -50,7 +50,7 @@ Three pipeline scripts are provided for different CRISPR applications:
 |---|---|---|---|---|---|
 | `DGD.py` | Standard SpCas9 | NGG | 30 nt | SpCas9 DGD ensemble | `DGD.csv` |
 | `Variants/DGDVar.py` | Broad-PAM Cas9 variants | All 16 dinucleotides | 30 nt | 9 SpCas9 variant ensembles | `DGDVar.csv` |
-| `Base-Editors (BE)/DGDbaseeditor.py` | Base editing (ABE/CBE) | NGG | 24 nt | ABE + CBE ensembles | `DGDBE.csv` |
+| `Base-Editors/DGDbaseeditor.py` | Base editing (ABE/CBE) | NGG | 24 nt | ABE + CBE ensembles | `DGDBE.csv` |
 
 ---
 
@@ -87,7 +87,7 @@ DGD-Cas9/
 ├── Variants/
 │   └── DGDVar.py                   # Broad-PAM pipeline — 9 SpCas9 variant models
 │
-└── Base-Editors (BE)/
+└── Base-Editors/
     └── DGDbaseeditor.py            # Base editor pipeline — ABE + CBE (24 nt window)
 ```
 
@@ -173,8 +173,8 @@ python Variants/DGDVar.py input.fa --output DGDVar_results.csv --models ./models
 ### Base editor guide design (ABE / CBE)
 
 ```bash
-python "Base-Editors (BE)/DGDbaseeditor.py" input.fa
-python "Base-Editors (BE)/DGDbaseeditor.py" input.fa --output DGDBE_results.csv
+python Base-Editors/DGDbaseeditor.py input.fa
+python Base-Editors/DGDbaseeditor.py input.fa --output DGDBE_results.csv
 ```
 
 ### CLI arguments (all three scripts)
@@ -295,7 +295,7 @@ Scores below 0 are reported as `no_activity`. The output file is `DGDVar.csv`.
 
 ## Base Editors — DGDbaseeditor.py
 
-`Base-Editors (BE)/DGDbaseeditor.py` is adapted for adenine base editors (ABE) and cytosine base editors (CBE). Key differences from the standard pipeline:
+`Base-Editors/DGDbaseeditor.py` is adapted for adenine base editors (ABE) and cytosine base editors (CBE). Key differences from the standard pipeline:
 
 | Parameter | DGD.py | DGDbaseeditor.py |
 |---|---|---|
@@ -387,6 +387,66 @@ python Accessory/score_deep.py --models ./models --input Deep_learning_file.csv 
 | `Deep_learning_file.csv` | Step 11 — Final model input |
 
 ---
+
+## Known Issues & Recent Fixes
+
+This branch includes a round of bug-fixing and cleanup. If you're comparing
+against an older checkout, here's what changed and why:
+
+### Fixed
+
+- **Critical crash in Step 11** (`compute_final_features` in `DGD.py`,
+  `Variants/DGDVar.py`, `Base-Editors/DGDbaseeditor.py`): `make_arrays.return_dimers_array()`
+  returns a `(dimers, anti_sequence)` tuple, but all three pipeline scripts
+  assigned the result directly to `dimers` without unpacking it. This made
+  `_calculate_stacking_energy()`/`_calculate_free_energy()` index into the
+  raw 2-tuple as if it were the dimer list, which raises `TypeError:
+  unhashable type: 'list'` on effectively every guide. **The pipeline could
+  not previously reach a final output.**
+- **Incomplete stacking-energy table** (`stacking_model.py`): only 4 of the
+  16 required RNA dinucleotide contexts were defined (`AA`, `AU`, `AG`,
+  `AC`). Real sequences routinely need the other 12, which would raise
+  `KeyError` even after the fix above. Rather than invent the missing
+  published thermodynamic values, lookups now fall back to `0.0 kcal/mol`
+  with a logged warning -- **please supply the complete 16-context table**
+  before trusting `Spacer_Scaffold_Gibbs_Energy` for real predictions.
+- **Every `Accessory/*.py` standalone script was broken**: each one calls
+  its corresponding `DGD.py` function with 2-4 explicit file-path
+  arguments, but those functions took zero arguments (all I/O was
+  hardcoded to fixed filenames). All affected functions in `DGD.py` now
+  accept optional path parameters with defaults matching the original
+  hardcoded filenames, so the standalone accessory scripts work as
+  documented and the main pipeline's behavior is unchanged.
+- **Odd-length dimer list crash**: `return_dimers_array()` does not
+  guarantee an even-length result, but the energy-calculation loop
+  processed it two entries at a time and could index one past the end.
+  Now safely drops a trailing unpaired entry instead of crashing.
+- Folder name in this README (`Base-Editors (BE)/`) didn't match the
+  actual directory (`Base-Editors/`) -- corrected.
+- A compiled `__pycache__/*.pyc` file was committed to git -- removed and
+  added to `.gitignore`.
+
+### Performance
+
+- `prepare_model_inputs()` rebuilt the same list of sequence 2-mers from
+  scratch 16 times per guide (once per dinucleotide it tested against).
+  Now built once and reused -- verified byte-identical output.
+- `_build_structure_df()` (used once per spacer position, per structural
+  region -- up to ~160 times per run) converted a DataFrame slice to a
+  Python dict and summed values in a pure-Python loop. Replaced with a
+  single vectorized pandas row-sum -- verified byte-identical output.
+- Row-wise feature-building loops (`make_fasta_for_rnafold`,
+  `compute_target_features`) switched from `.iterrows()` to the faster
+  `.itertuples()`.
+
+### Still missing (not invented -- see "Missing files" below)
+
+- `connection_to_matrix.cpp` (C++ source for pipeline Step 6) and the
+  `models/` directory of trained `.h5` weights aren't present in this
+  branch's history. `requirements.txt`, `.gitignore`, and a `Makefile`
+  have been recreated from what the README documents, but the actual
+  compiled-binary source and trained model weights need to be supplied
+  by the repository owner -- they can't be safely reconstructed.
 
 ## License
 

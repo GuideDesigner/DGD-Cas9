@@ -209,30 +209,37 @@ def scan_guides(fasta_path: str) -> None:
 # Step 2 — Generate FASTA for RNAfold (spacer + scaffold)
 # ---------------------------------------------------------------------------
 
-def make_fasta_for_rnafold() -> None:
+def make_fasta_for_rnafold(
+    input_csv: str = PipelineFiles.STRUCTURE_FILE,
+    fasta_out: str = PipelineFiles.FASTA_OUT,
+    csv_out_path: str = PipelineFiles.SEQUENCE_CSV,
+) -> None:
     """
     Append the Cas9 scaffold sequence to each guide's spacer region and write
     a FASTA file for downstream RNAfold structure prediction.
 
-    Reads  : ``Structure_file.csv``
-    Writes : ``Structure_Connection.fa``, ``Structure_Connection.csv``
+    Reads  : *input_csv*  (default: ``Structure_file.csv``)
+    Writes : *fasta_out*, *csv_out_path*
     """
-    struct_df = pd.read_csv(PipelineFiles.STRUCTURE_FILE)
+    struct_df = pd.read_csv(input_csv)
 
     with (
-        open(PipelineFiles.FASTA_OUT, "w", encoding="utf-8") as fa_out,
-        open(PipelineFiles.SEQUENCE_CSV, "w", encoding="utf-8") as csv_out,
+        open(fasta_out, "w", encoding="utf-8") as fa_out,
+        open(csv_out_path, "w", encoding="utf-8") as csv_out,
     ):
         csv_out.write("ID,Sequence\n")
-        for _, row in struct_df.iterrows():
-            guide_id = row["ID"]
-            spacer   = row["Sequence"][4:24]          # 20-bp spacer (skip PAM)
+        # PERF: itertuples() avoids building a pandas Series per row (what
+        # iterrows() does), which is noticeably faster over many thousands
+        # of guide candidates.
+        for row in struct_df.itertuples(index=False):
+            guide_id = row.ID
+            spacer   = row.Sequence[4:24]              # 20-bp spacer (skip PAM)
             full_seq = spacer + SCAFFOLD_SEQ           # spacer + scaffold
 
             fa_out.write(f">{guide_id}\n{full_seq}\n")
             csv_out.write(f"{guide_id},{full_seq}\n")
 
-    logger.info("RNAfold FASTA written to '%s'", PipelineFiles.FASTA_OUT)
+    logger.info("RNAfold FASTA written to '%s'", fasta_out)
 
 
 # ---------------------------------------------------------------------------
@@ -282,13 +289,16 @@ def _sequence_entropy(region: str) -> float:
     return round(entropy, 1)
 
 
-def compute_target_features() -> None:
+def compute_target_features(
+    input_csv: str = PipelineFiles.STRUCTURE_FILE,
+    output_csv: str = PipelineFiles.TARGET_FEATURES,
+) -> None:
     """
     Extract sequence, thermodynamic, and compositional features for every guide
     candidate and write them to ``Target_sequence_feature.csv``.
 
-    Reads  : ``Structure_file.csv``
-    Writes : ``Target_sequence_feature.csv``
+    Reads  : *input_csv*  (default: ``Structure_file.csv``)
+    Writes : *output_csv* (default: ``Target_sequence_feature.csv``)
 
     Features computed per guide:
       - Per-position mono/dinucleotide one-hot encoding
@@ -310,12 +320,13 @@ def compute_target_features() -> None:
     ]
     header = ["ID"] + mono_cols + di_cols + extra_cols
 
-    struct_df = pd.read_csv(PipelineFiles.STRUCTURE_FILE)
+    struct_df = pd.read_csv(input_csv)
     rows: List[Dict] = []
 
-    for _, row in struct_df.iterrows():
-        guide_id  = row["ID"]
-        full_seq  = row["Sequence"].upper()
+    # PERF: itertuples() avoids building a pandas Series per row.
+    for row in struct_df.itertuples(index=False):
+        guide_id  = row.ID
+        full_seq  = row.Sequence.upper()
         target    = full_seq[4:24]     # 20-bp target region (positions 4–23)
 
         mono_vec, di_vec = _build_position_features(full_seq)
@@ -353,11 +364,11 @@ def compute_target_features() -> None:
         rows.append(record)
 
     pd.DataFrame(rows, columns=header).to_csv(
-        PipelineFiles.TARGET_FEATURES, index=False
+        output_csv, index=False
     )
     logger.info(
         "Target features written to '%s'  (%d guides)",
-        PipelineFiles.TARGET_FEATURES, len(rows),
+        output_csv, len(rows),
     )
 
 
@@ -365,12 +376,15 @@ def compute_target_features() -> None:
 # Step 4 — Parse RNAfold dot-bracket output and build connection matrix
 # ---------------------------------------------------------------------------
 
-def parse_rnafold_output() -> None:
+def parse_rnafold_output(
+    input_path: str = PipelineFiles.RNAFOLD_OUTS,
+    output_path: str = PipelineFiles.STRUCTURE_OUT,
+) -> None:
     """
     Parse RNAfold dot-bracket output and build a tabular connection matrix.
 
-    Reads  : ``Structure_Connection.outs``  (b2ct format)
-    Writes : ``Structure_out.txt``
+    Reads  : *input_path*  (default: ``Structure_Connection.outs``, b2ct format)
+    Writes : *output_path* (default: ``Structure_out.txt``)
 
     Each row of the output represents one guide and contains 102 connection
     columns (one per position in spacer + scaffold).
@@ -380,7 +394,7 @@ def parse_rnafold_output() -> None:
     guide_connections: Dict[str, List[str]] = {}
     current_id: Optional[str] = None
 
-    with open(PipelineFiles.RNAFOLD_OUTS, "r", encoding="utf-8") as fh:
+    with open(input_path, "r", encoding="utf-8") as fh:
         for line in fh:
             parts = list(filter(None, line.strip().split(" ")))
             if len(parts) == 5:
@@ -393,24 +407,27 @@ def parse_rnafold_output() -> None:
     df.index.name = "ID"
     df.reset_index(inplace=True)
     df.columns = header_cols
-    df.to_csv(PipelineFiles.STRUCTURE_OUT, sep="\t", index=False)
+    df.to_csv(output_path, sep="\t", index=False)
 
-    logger.info("Connection matrix written to '%s'", PipelineFiles.STRUCTURE_OUT)
+    logger.info("Connection matrix written to '%s'", output_path)
 
 
 # ---------------------------------------------------------------------------
 # Step 5 — Extract spacer–scaffold base-pair columns
 # ---------------------------------------------------------------------------
 
-def extract_spacer_scaffold_pairs() -> None:
+def extract_spacer_scaffold_pairs(
+    input_csv: str = PipelineFiles.BASEPAIRS_CSV,
+    output_csv: str = PipelineFiles.SPACER_CSV,
+) -> None:
     """
     Extract spacer (positions 1–20) to scaffold (positions 21–102) base-pair
     columns from the connection matrix.
 
-    Reads  : ``Structure_basepairs.csv``
-    Writes : ``spacer_scaffold_basepairs.csv``
+    Reads  : *input_csv*  (default: ``Structure_basepairs.csv``)
+    Writes : *output_csv* (default: ``spacer_scaffold_basepairs.csv``)
     """
-    conn_df = pd.read_csv(PipelineFiles.BASEPAIRS_CSV)
+    conn_df = pd.read_csv(input_csv)
 
     pair_cols = [
         f"Connection_Pos{spacer}_Pos{scaffold}"
@@ -419,9 +436,9 @@ def extract_spacer_scaffold_pairs() -> None:
     ]
     pair_cols.append("ID")
 
-    conn_df[pair_cols].to_csv(PipelineFiles.SPACER_CSV, index=False)
+    conn_df[pair_cols].to_csv(output_csv, index=False)
     logger.info(
-        "Spacer–scaffold pairs written to '%s'", PipelineFiles.SPACER_CSV
+        "Spacer–scaffold pairs written to '%s'", output_csv
     )
 
 
@@ -429,15 +446,18 @@ def extract_spacer_scaffold_pairs() -> None:
 # Step 6 — Compute spacer–scaffold connection frequency
 # ---------------------------------------------------------------------------
 
-def compute_connection_frequency() -> None:
+def compute_connection_frequency(
+    input_csv: str = PipelineFiles.SPACER_CSV,
+    output_csv: str = PipelineFiles.SPACER_FEATURE_CSV,
+) -> None:
     """
     Pivot the spacer–scaffold connection table to a long format and extract
     position labels.
 
-    Reads  : ``spacer_scaffold_basepairs.csv``
-    Writes : ``spacer_scaffold_feature.csv``
+    Reads  : *input_csv*  (default: ``spacer_scaffold_basepairs.csv``)
+    Writes : *output_csv* (default: ``spacer_scaffold_feature.csv``)
     """
-    conn_df = pd.read_csv(PipelineFiles.SPACER_CSV)
+    conn_df = pd.read_csv(input_csv)
     long_df = conn_df.set_index("ID").T.reset_index()
 
     feat_df = pd.DataFrame(long_df.iloc[:, 0])
@@ -449,9 +469,9 @@ def compute_connection_frequency() -> None:
     feat_df["Pos_B"] = feat_df["Pos_B"].str.extract(r"(\d+)", expand=False).astype(int)
     feat_df = feat_df[["nucleotide", "Pos_A", "Pos_B"]]
 
-    feat_df.to_csv(PipelineFiles.SPACER_FEATURE_CSV, index=False)
+    feat_df.to_csv(output_csv, index=False)
     logger.info(
-        "Connection frequency written to '%s'", PipelineFiles.SPACER_FEATURE_CSV
+        "Connection frequency written to '%s'", output_csv
     )
 
 
@@ -459,7 +479,10 @@ def compute_connection_frequency() -> None:
 # Step 7 — Annotate structural regions
 # ---------------------------------------------------------------------------
 
-def annotate_structure_regions() -> None:
+def annotate_structure_regions(
+    input_csv: str = PipelineFiles.SPACER_FEATURE_CSV,
+    output_csv: str = PipelineFiles.STRUCTURAL_ANNOT,
+) -> None:
     """
     Label each spacer–scaffold connection by the scaffold structural region it
     maps to (R, TL, AR, LR, SL1, SL2, SL3, or NS for none of the above).
@@ -474,10 +497,10 @@ def annotate_structure_regions() -> None:
       SL3 : 88–90    (stem loop 3)
       NS  : all others (not specified)
 
-    Reads  : ``spacer_scaffold_feature.csv``
-    Writes : ``Structural_annotation.csv``
+    Reads  : *input_csv*  (default: ``spacer_scaffold_feature.csv``)
+    Writes : *output_csv* (default: ``Structural_annotation.csv``)
     """
-    df = pd.read_csv(PipelineFiles.SPACER_FEATURE_CSV)
+    df = pd.read_csv(input_csv)
 
     region_ranges = {
         "R":   (21, 32),
@@ -494,8 +517,8 @@ def annotate_structure_regions() -> None:
         df.loc[mask, "Structure"] = label
 
     df["Structure"].fillna("NS", inplace=True)
-    df.to_csv(PipelineFiles.STRUCTURAL_ANNOT, index=False)
-    logger.info("Structural annotation written to '%s'", PipelineFiles.STRUCTURAL_ANNOT)
+    df.to_csv(output_csv, index=False)
+    logger.info("Structural annotation written to '%s'", output_csv)
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +553,8 @@ def _build_structure_df(
         set(region_df["Pos_A"].tolist()),
         reverse=True,
     )
-    nested: Dict[str, Dict[str, int]] = {}
+    nested: Dict[str, pd.Series] = {}
+    guide_ids = connection_bp["ID"]
 
     for pos in positions:
         col_name  = f"{prefix}{pos}"
@@ -541,15 +565,16 @@ def _build_structure_df(
         if not nuc_list:
             continue
 
-        conn_info = connection_bp[nuc_list].copy()
-        conn_info.insert(0, "ID", connection_bp["ID"])
-        id_dict   = conn_info.set_index("ID").T.to_dict("list")
+        # PERF FIX: the original code round-tripped this slice through
+        # set_index("ID").T.to_dict("list") and then summed each guide's
+        # values in a pure-Python loop -- an expensive per-position
+        # conversion. A single vectorized row-sum computes the same
+        # "does this guide have >=1 connection here" flag for every guide
+        # at once, with identical results.
+        flags = (connection_bp[nuc_list].sum(axis=1) > 0).astype(int)
+        flags.index = guide_ids.values
 
-        pos_flags: Dict[str, int] = {}
-        for guide_id, values in id_dict.items():
-            pos_flags[guide_id] = 1 if sum(values) > 0 else 0
-
-        nested[col_name] = pos_flags
+        nested[col_name] = flags
 
     result_df = pd.DataFrame(nested)
     result_df[f"Total_{prefix}"] = result_df.sum(axis=1)
@@ -558,18 +583,24 @@ def _build_structure_df(
     return result_df
 
 
-def build_features() -> None:
+def build_features(
+    bp_input: str = PipelineFiles.BASEPAIRS_CSV,
+    seq_input: str = PipelineFiles.TARGET_FEATURES,
+    annot_input: str = PipelineFiles.STRUCTURAL_ANNOT,
+    output_csv: str = PipelineFiles.FEATURE_DATA,
+) -> None:
     """
     Combine target sequence features with spacer–scaffold structural connectivity
     features into a single feature matrix for deep learning.
 
-    Reads  : ``Structure_basepairs.csv``, ``Target_sequence_feature.csv``,
-             ``Structural_annotation.csv``
-    Writes : ``Feature_Data_Spacer_Scaffold.csv``
+    Reads  : *bp_input*, *seq_input*, *annot_input*
+             (defaults: ``Structure_basepairs.csv``, ``Target_sequence_feature.csv``,
+             ``Structural_annotation.csv``)
+    Writes : *output_csv* (default: ``Feature_Data_Spacer_Scaffold.csv``)
     """
-    conn_bp      = pd.read_csv(PipelineFiles.BASEPAIRS_CSV)
-    sequence_df  = pd.read_csv(PipelineFiles.TARGET_FEATURES)
-    annot_df     = pd.read_csv(PipelineFiles.STRUCTURAL_ANNOT)
+    conn_bp      = pd.read_csv(bp_input)
+    sequence_df  = pd.read_csv(seq_input)
+    annot_df     = pd.read_csv(annot_input)
 
     # Build one connectivity DataFrame per structural region
     region_labels = ["AR", "NS", "R", "SL1", "LR", "SL2", "SL3", "TL"]
@@ -600,10 +631,10 @@ def build_features() -> None:
 
     # Merge with sequence features
     merged = sequence_df.merge(connectivity, on="ID", how="inner")
-    merged.to_csv(PipelineFiles.FEATURE_DATA, index=False)
+    merged.to_csv(output_csv, index=False)
     logger.info(
         "Combined features written to '%s'  (%d guides, %d features)",
-        PipelineFiles.FEATURE_DATA, len(merged), len(merged.columns),
+        output_csv, len(merged), len(merged.columns),
     )
 
 
@@ -706,22 +737,40 @@ def _calculate_stacking_energy(dimers: List[str]) -> float:
     """
     stacking = stacking_model.return_stacking_model()
     energy   = 0.0
-    for i in range(0, len(dimers), 2):
-        energy += stacking[dimers[i]][dimers[i + 1][::-1]]
+    for i in range(0, len(dimers) - 1, 2):
+        outer, inner = dimers[i], dimers[i + 1][::-1]
+        # See the KNOWN ISSUE note in stacking_model.return_stacking_model():
+        # the table only covers 4 of the 16 possible dinucleotide contexts.
+        # Fall back to 0.0 (and warn once per missing context) instead of
+        # crashing, so the pipeline can still run end to end.
+        context = stacking.get(outer)
+        if context is None:
+            logger.warning(
+                "Stacking table has no entry for dinucleotide '%s'; "
+                "treating its contribution as 0.0 kcal/mol (see "
+                "stacking_model.return_stacking_model docstring).", outer,
+            )
+            continue
+        energy += context.get(inner, 0.0)
     return energy
 
 
-def compute_final_features() -> None:
+def compute_final_features(
+    rnafold_out: str = PipelineFiles.RNAFOLD_OUT,
+    feature_input: str = PipelineFiles.FEATURE_DATA,
+    output_csv: str = PipelineFiles.DEEP_LEARNING,
+) -> None:
     """
     Compute spacer–scaffold monomer/dimer counts, GC ratio, and stacking energy
     for each guide from the RNAfold structural output, then merge with the
     combined feature matrix.
 
-    Reads  : ``Structure_Connection.out``, ``Feature_Data_Spacer_Scaffold.csv``
-    Writes : ``Deep_learning_file.csv``
+    Reads  : *rnafold_out*, *feature_input*
+             (defaults: ``Structure_Connection.out``, ``Feature_Data_Spacer_Scaffold.csv``)
+    Writes : *output_csv* (default: ``Deep_learning_file.csv``)
     """
-    structure_data = read_rnafold_dot_bracket(PipelineFiles.RNAFOLD_OUT)
-    feature_df     = pd.read_csv(PipelineFiles.FEATURE_DATA)
+    structure_data = read_rnafold_dot_bracket(rnafold_out)
+    feature_df     = pd.read_csv(feature_input)
 
     records_gc_energy: Dict[str, List] = {}
     records_counts:    Dict[str, Dict] = {}
@@ -731,7 +780,13 @@ def compute_final_features() -> None:
         partner_idx   = make_arrays.adjust_partner_index(partner_idx)
         partner_base  = make_arrays.return_partner_base(partner_idx, sequence)
         _conn_len, count = make_arrays.return_connection_length(partner_idx)
-        dimers        = make_arrays.return_dimers_array(sequence, partner_idx)
+        # BUG FIX: return_dimers_array() returns a (dimers, anti_sequence)
+        # tuple. This used to be assigned directly to `dimers` without
+        # unpacking, so _count_dimers()/_calculate_stacking_energy() below
+        # received a 2-element tuple instead of the dimer list -- which
+        # made _calculate_stacking_energy() index into it as
+        # stacking[<list>][...], an unhashable-type crash on every guide.
+        dimers, _anti_seq = make_arrays.return_dimers_array(sequence, partner_idx)
 
         gc_ratio       = _count_gc_pairs(sequence, partner_idx) / count if count else 0.0
         monomer_counts = _count_monomers(sequence, partner_idx)
@@ -768,10 +823,10 @@ def compute_final_features() -> None:
     ]
 
     final_df = feature_df.merge(scaffold_features, on="ID", how="inner")
-    final_df.to_csv(PipelineFiles.DEEP_LEARNING, index=False)
+    final_df.to_csv(output_csv, index=False)
     logger.info(
         "Deep learning features written to '%s'  (%d guides, %d features)",
-        PipelineFiles.DEEP_LEARNING, len(final_df), len(final_df.columns),
+        output_csv, len(final_df), len(final_df.columns),
     )
 
 
@@ -849,16 +904,22 @@ def prepare_model_inputs(
 
         aux_row = [float(vals[i]) for i in aux_indices]
         if has_dinuc:
-            kmer_flags = []
             seq_str = ""
             for i in range(30):
                 if a_vec[i]:   seq_str += "A"
                 elif t_vec[i]: seq_str += "T"
                 elif c_vec[i]: seq_str += "C"
                 elif g_vec[i]: seq_str += "G"
+            # PERF FIX: the list of 2-mers along seq_str is identical for
+            # every dinuc we test against below, but the original code
+            # rebuilt it from scratch inside the loop -- 16 times per guide
+            # instead of once. Building it once here gives the same output
+            # with 1/16th the string-slicing work per guide.
+            kmers = [seq_str[i:i+2] for i in range(len(seq_str) - 1)]
+            kmer_flags = []
             for nuc1, nuc2 in itertools.product("ATCG", repeat=2):
                 dinuc = nuc1 + nuc2
-                for kmer in [seq_str[i:i+2] for i in range(len(seq_str)-1)]:
+                for kmer in kmers:
                     kmer_flags.append(1 if kmer == dinuc else 0)
             aux_row += kmer_flags
 
@@ -913,23 +974,30 @@ def run_model_ensemble(model_dir: str, seq_array: np.ndarray,
     return ensemble_mean
 
 
-def score_guides(model_dir: str, output_path: str) -> None:
+def score_guides(
+    model_dir: str,
+    input_csv: str = PipelineFiles.DEEP_LEARNING,
+    struct_input: str = PipelineFiles.STRUCTURE_FILE,
+    output_path: str = PipelineFiles.OUTPUT,
+) -> None:
     """
     Load features, run the DGD ensemble model, merge scores with guide metadata,
     and write the final results CSV.
 
     Args:
-        model_dir:   Path to the directory containing trained ``.h5`` model files.
-        output_path: Destination path for the output CSV (default: ``DGD.csv``).
+        model_dir:    Path to the directory containing trained ``.h5`` model files.
+        input_csv:    Deep-learning feature CSV (default: ``Deep_learning_file.csv``).
+        struct_input: Guide structure CSV (default: ``Structure_file.csv``).
+        output_path:  Destination path for the output CSV (default: ``DGD.csv``).
 
-    Reads  : ``Deep_learning_file.csv``, ``Structure_file.csv``
+    Reads  : *input_csv*, *struct_input*
     Writes : *output_path*
     """
-    seq_array, aux_array, guide_ids = prepare_model_inputs(PipelineFiles.DEEP_LEARNING)
+    seq_array, aux_array, guide_ids = prepare_model_inputs(input_csv)
     scores = run_model_ensemble(model_dir, seq_array, aux_array)
 
     score_df   = pd.DataFrame({"ID": guide_ids, "DGD": scores})
-    struct_df  = pd.read_csv(PipelineFiles.STRUCTURE_FILE)
+    struct_df  = pd.read_csv(struct_input)
     results    = struct_df.merge(score_df, on="ID", how="inner")
     results.to_csv(output_path, index=False)
 
@@ -1030,7 +1098,7 @@ def run_pipeline(fasta_path: str, model_dir: str, output_path: str) -> None:
 
     # Step 12 — Score with DGD ensemble
     logger.info("[12/12] Scoring with DGD model ensemble...")
-    score_guides(model_dir, output_path)
+    score_guides(model_dir, output_path=output_path)
 
     logger.info("=== DGD Pipeline Complete ===")
     logger.info("Results written to '%s'", output_path)
