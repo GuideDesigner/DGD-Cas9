@@ -1,0 +1,23 @@
+# DGD-Cas9 Snakemake workflow configuration
+# --------------------------------------------
+# Input FASTA (100-10,000 nt sequences). A small synthetic demo sequence is
+# bundled at demo/input.fa so the workflow can be tried immediately.
+fasta: demo/input.fa
+
+# Which pipeline variant to run:
+#   standard    - DGD.py               (SpCas9, NGG PAM)            -> DGD.csv
+#   broad_pam   - Variants/DGDVar.py    (9 broad-PAM Cas9 variants)  -> DGDVar.csv
+#   base_editor - Base-Editors/DGDbaseeditor.py (ABE/CBE)            -> DGDBE.csv
+variant: standard
+
+# Directory containing trained .h5 model files for the chosen variant.
+# NOT included in this repository (see README "Known Issues" section) --
+# scoring (the final pipeline step) will fail with a clear error until you
+# supply real trained models here.
+models_dir: models
+
+# Whether to run the final scoring step (Step 12 / Step 11 for variants).
+# Leave this false to exercise steps 1-11 (guide scanning through feature
+# engineering) without needing trained models -- useful for testing the
+# workflow plumbing on a machine that doesn't have the models yet.
+run_scoring: false

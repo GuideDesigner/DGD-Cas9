@@ -1,0 +1,14 @@
+name: dgd-cas9
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python>=3.8
+  - numpy>=1.21
+  - pandas>=1.3
+  - biopython>=1.79
+  - viennarna>=2.5.0   # provides both the Python `RNA` module and the
+                        # RNAfold / b2ct command-line tools used in Step 4
+  - pip
+  - pip:
+      - tensorflow>=2.6

@@ -1,0 +1,42 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Compiled C++ binary (built locally via `make`)
+connection_to_matrix
+
+# Trained model weights (large binaries; not tracked in git)
+models/
+*.h5
+
+# Generated pipeline intermediate/output files (see PipelineFiles in DGD.py)
+Structure_file.csv
+Structure_Connection.fa
+Structure_Connection.csv
+Structure_Connection.out
+Structure_Connection.outs
+Structure_Cas9_out.txt
+Structure_out.txt
+Structure_basepairs.csv
+spacer_scaffold_basepairs.csv
+spacer_scaffold_feature.csv
+Structural_annotation.csv
+Feature_Data_Spacer_Scaffold.csv
+Deep_learning_file.csv
+DGD.csv
+DGDVar.csv
+DGDBE.csv
+results/
+
+# Snakemake
+.snakemake/
+
+# OS / editor cruft
+.DS_Store
+*.swp
